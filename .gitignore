@@ -3,3 +3,4 @@
 .fasta
 .fa
 *.gz
+tests/
