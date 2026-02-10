@@ -1,5 +1,6 @@
 # Feb 2026
 # JVD
+import argparse
 
 def getMHCIPeptides(prot: str):
     peps = []
@@ -33,12 +34,33 @@ def getAllNmers(protFasta):
     return allNmers
 
 if __name__ == '__main__':
-    protFasta = 'tests/testUnique.fa'
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-f', '--File', help='Path/To/ Input fasta file')
+    parser.add_argument('-o', '--Output', help='Output .txt file')
+    args = parser.parse_args()
+
+    if not args.File:
+        print('Supply input protein database fasta file. Usage: python generatePeptides.py -h')
+        exit(1)
+
+    protFasta = args.File
+
     allPossiblePeptides = getAllNmers(protFasta)
-    print(f'{len(allPossiblePeptides)} peptides produced')
+    # DEBUG
+    #   print(f'{len(allPossiblePeptides)} peptides produced')
+
     # This removes all duplicates
     uniquePeptides = list(set(allPossiblePeptides))
-    print(f'{len(uniquePeptides)} unique peptides produced')
+    # DEBUG
+    #   print(f'{len(uniquePeptides)} unique peptides produced')
+
+    if args.Output:
+        with open(args.Output, 'w') as f:
+            for pep in uniquePeptides:
+                f.write(f"{pep}\n")
+    else:
+        print(uniquePeptides)
     
     # TODO
     # Write to text file or keep as list
