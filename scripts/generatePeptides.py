@@ -2,6 +2,11 @@
 # JVD
 import argparse
 
+parser = argparse.ArgumentParser()
+parser.add_argument('-f', '--File', help='Path/To/ Input fasta file')
+parser.add_argument('-o', '--Output', help='Output .txt file')
+args = parser.parse_args()
+
 def getMHCIPeptides(prot: str):
     peps = []
     pepLens = [8, 9, 10, 11]
@@ -35,11 +40,6 @@ def getAllNmers(protFasta):
 
 if __name__ == '__main__':
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-f', '--File', help='Path/To/ Input fasta file')
-    parser.add_argument('-o', '--Output', help='Output .txt file')
-    args = parser.parse_args()
-
     if not args.File:
         print('Supply input protein database fasta file. Usage: python generatePeptides.py -h')
         exit(1)
@@ -63,7 +63,5 @@ if __name__ == '__main__':
         print(uniquePeptides)
     
     # TODO
-    # Write to text file or keep as list
     # Group by Nmers or by proteins
-    # Use arguments in this file
 
