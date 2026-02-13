@@ -13,6 +13,9 @@ def getMHCIPeptides(prot: str):
 
     for pepLen in pepLens:
         # Change here if you decide to start peptides at beginning of ORF
+        # TODO
+        # Do we need to do a sliding window here if we've already included transcripts for all 3 frames
+        # Yes, because this has got to do with the peptide splicing not necessarily starting at the start of the peptide, not transcription
         for startPos in range(pepLen-1):
             # Creates a list of chunks of size n from the protein string; discards any trailing chunk < n
             nmers = [''.join(chunk) for chunk in zip(*[iter(prot[startPos:])]*pepLen)]

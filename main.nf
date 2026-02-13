@@ -2,11 +2,11 @@
 # Header - author etc
 
 # TODO
-# include processes from modules
+# include workflows from modules
+# maybe include processes from modules
 
 # TODO
 # Main Workflow
-
 workflow {
 
     ## TODO
@@ -14,6 +14,9 @@ workflow {
 
     ## TODO
     # Expression Workflow
+    # Argument for pre-filtered or not
+    # Add check for abundance.tsv file pre-filtered is indicated
+    # Run Kallisto if not pre-filtered
 
     ## TODO
     # Hla Prediction Workflow
