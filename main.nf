@@ -1,29 +1,31 @@
 // TODO
 // Header - author etc
 
-// TODO
-// include workflows from modules
-// maybe include processes from modules
+include { 
+    TAP_WORKFLOW
+} from './modules/workflows/tap_workflow'
 
 // TODO
 // Main Workflow
 
 workflow {
 
+    main:
     // TODO
     // Process convert protein fasta dbs to peptide dbs
 
     // TODO
     // Expression Workflow
     // Argument for pre-filtered or not
-    // Add check for abundance.tsv file pre-filtered is indicated
+    // Add check for abundance.tsv file if pre-filtered is indicated
     // Run Kallisto if not pre-filtered
 
     // TODO
     // Hla Prediction Workflow
 
     // TODO
-    // Binding Affinity Workflow (TAP)
+    // Binding Affinity Workflow (TAP) - explore adding more tools or develop own
+    TAP_WORKFLOW()
 
     // TODO
     // Binding Affinity Workflow (MHC)
@@ -37,8 +39,15 @@ workflow {
     // TODO
     // Peptide Prioritisation Workflow
 
-    // TODO
-    // emit: output
+    publish:
+    tap = TAP_WORKFLOW.out
+}
+
+output {
+    tap {
+        path 'tap'
+        mode 'copy'
+    }
 }
 
 // TODO

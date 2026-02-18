@@ -5,3 +5,8 @@
 *.gz
 tests/
 udp-code/
+work/
+.nextflow.*
+test.nf
+results/
+.nextflow
