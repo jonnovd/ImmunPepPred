@@ -8,8 +8,6 @@ workflow TAP_WORKFLOW {
         dtin_ch = channel.fromPath(params.deeptap_in)
         PREP_DEEPTAP_INPUT(dtin_ch)
 
-        PREP_DEEPTAP_INPUT.out.view()
-
         RUN_DEEPTAP(PREP_DEEPTAP_INPUT.out)
 
     emit:
