@@ -4,9 +4,13 @@ include {
 } from '../processes/tap_processes'
 
 workflow TAP_WORKFLOW {
+    take:
+        deeptap_in
+    
     main:
-        dtin_ch = channel.fromPath(params.deeptap_in)
-        PREP_DEEPTAP_INPUT(dtin_ch)
+        //dtin_ch = channel.fromPath(deeptap_in)
+        //PREP_DEEPTAP_INPUT(dtin_ch)
+        PREP_DEEPTAP_INPUT(deeptap_in)
 
         RUN_DEEPTAP(PREP_DEEPTAP_INPUT.out)
 

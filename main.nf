@@ -1,5 +1,8 @@
 // TODO
 // Header - author etc
+include {
+    GENERATE_PEPTIDES
+} from './modules/processes/py_wrapper_processes'
 
 include { 
     TAP_WORKFLOW
@@ -13,6 +16,7 @@ workflow {
     main:
     // TODO
     // Process convert protein fasta dbs to peptide dbs
+    GENERATE_PEPTIDES(params.udp_out)
 
     // TODO
     // Expression Workflow
@@ -21,11 +25,13 @@ workflow {
     // Run Kallisto if not pre-filtered
 
     // TODO
-    // Hla Prediction Workflow
+    // Binding Affinity Workflow (TAP) 
+    // - explore adding more tools (CLTAP) or develop own
+    // - take input from previous steps
+    TAP_WORKFLOW(GENERATE_PEPTIDES.out)
 
     // TODO
-    // Binding Affinity Workflow (TAP) - explore adding more tools or develop own
-    TAP_WORKFLOW()
+    // Hla Prediction Workflow
 
     // TODO
     // Binding Affinity Workflow (MHC)
@@ -40,10 +46,15 @@ workflow {
     // Peptide Prioritisation Workflow
 
     publish:
-    tap = TAP_WORKFLOW.out
+        allNmers = GENERATE_PEPTIDES.out
+        tap = TAP_WORKFLOW.out
 }
 
 output {
+    allNmers {
+        path 'allNmers'
+        mode 'copy'
+    }
     tap {
         path 'tap'
         mode 'copy'
