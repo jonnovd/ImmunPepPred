@@ -27,8 +27,7 @@ workflow {
     // TODO
     // Binding Affinity Workflow (TAP) 
     // - explore adding more tools (CLTAP) or develop own
-    // - take input from previous steps
-    TAP_WORKFLOW(GENERATE_PEPTIDES.out)
+    TAP_WORKFLOW(GENERATE_PEPTIDES.out.txt)
 
     // TODO
     // Hla Prediction Workflow
@@ -46,7 +45,7 @@ workflow {
     // Peptide Prioritisation Workflow
 
     publish:
-        allNmers = GENERATE_PEPTIDES.out
+        allNmers = GENERATE_PEPTIDES.out.csv
         tap = TAP_WORKFLOW.out
 }
 

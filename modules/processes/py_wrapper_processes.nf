@@ -3,10 +3,11 @@ process GENERATE_PEPTIDES {
     input:
         path udp_out
     output:
-        path 'allNmersFile.txt'
+        path 'allNmersFile.txt', emit: txt
+        path 'allNmersWithTranscriptIDFile.txt', emit: csv
 
     script:
     """
-        python3 ${params.generatePeptides} -f "${udp_out}" -o "allNmersFile.txt"
+        python3 ${params.generatePeptides} -i "${udp_out}" -p "allNmersFile.txt" -c 'allNmersWithTranscriptIDFile.txt'
     """
 }
