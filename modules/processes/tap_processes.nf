@@ -20,9 +20,9 @@ process RUN_DEEPTAP {
     input:
         path peptides_csv
     output:
-        path "${peptides_csv.baseName}_DeepTAP_reg_predresult.csv", emit: deeptap_out
+        path "${peptides_csv.baseName}_DeepTAP_cla_predresult.csv", emit: deeptap_out
     script:
     """
-        python ${params.deeptap} -t reg -f $peptides_csv
+        python ${params.deeptap} -t cla -f $peptides_csv
     """
 }
