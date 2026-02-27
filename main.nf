@@ -2,14 +2,11 @@
 // Header - author etc
 include {
     GENERATE_PEPTIDES
-} from './modules/processes/py_wrapper_processes'
+} from './modules/processes/wrapper_processes'
 
 include { 
     TAP_WORKFLOW
 } from './modules/workflows/tap_workflow'
-
-// TODO
-// Main Workflow
 
 workflow {
 
