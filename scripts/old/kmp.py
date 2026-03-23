@@ -25,7 +25,7 @@ def generateMHCIPeptides(prot: str, pepLens = [8, 9, 10, 11]):
             yield prot[i: i + pepLen]
 
 # KMP Algorithm
-def constructLps(pat, lps):
+def constructLps_KMP(pat, lps):
     
     # len stores the length of longest prefix which 
     # is also a suffix for the previous index
@@ -58,14 +58,14 @@ def constructLps(pat, lps):
                 i += 1
 
 # KMP algorithm
-def search(pat, txt):
+def search_KMP(pat, txt):
     n = len(txt)
     m = len(pat)
 
     lps = [0] * m
     res = []
 
-    constructLps(pat, lps)
+    constructLps_KMP(pat, lps)
 
     # Pointers i and j, for traversing 
     # the text and pattern
@@ -120,24 +120,19 @@ def parseFasta(protFasta):
     yield header, "".join(seq_tokens)
 
 def main():
-
+    # Input validation
     if not args.Input:
         print('Supply input protein database fasta file. Usage: python generatePeptides.py -h')
         exit(1)
-
     if not args.Peptides and not args.Csv:
         print('No Output file specified. Use -p or -c')
         exit(1)
-
     FILTER = False 
-
     if args.ReferenceFile:
         FILTER = True
 
-
     pep_file = open(args.Peptides, 'w') if args.Peptides else None
     csv_file = open(args.Csv, 'w') if args.Csv else None
-
     allNMers = []
 
     for header, orf in parseFasta(args.Input):
@@ -146,13 +141,15 @@ def main():
     allNMers = set(allNMers)
 
     #Filtering out any peptides that are in the human proteome reference
+    # TODO
+    # This could be a place to add GTex data filtering
+    # Only remove peptides produced from ORFs that are expressed in the healthy tissue in this site
     if FILTER:
         for header, prot in parseFasta(args.ReferenceFile):
             nmers_to_remove = set()
             for nmer in allNMers:
-                if search(nmer, prot):
+                if search_KMP(nmer, prot):
                     nmers_to_remove.add(nmer)
-                    print(nmers_to_remove)
             allNMers -= nmers_to_remove
 
     for pep in allNMers:

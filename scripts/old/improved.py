@@ -53,15 +53,15 @@ def buildReferenceSet(referenceFasta, pepLens=[8, 9, 10, 11]):
     return ref_nmers
 
 def extractTranscriptId(header: str) -> str:
-    return header.split()[0].lstrip('>')[:header.index('|')-1]
-    #return header.split()[0].lstrip('>')
+    
+    return header.split()[0].lstrip('>')
 
 def buildPeptideTranscriptMap(inputFasta, pepLens=[8, 9, 10, 11]):
-    peptide_transcripts = defaultdict(list)
+    peptide_transcripts = defaultdict(set)
     for header, orf in parseFasta(inputFasta):
         transcript_id = extractTranscriptId(header)
         for pep in getMHCIPeptidesSet(orf, pepLens):
-            peptide_transcripts[pep].append(transcript_id)
+            peptide_transcripts[pep].add(transcript_id)
     return peptide_transcripts
 
 def main():
@@ -78,34 +78,33 @@ def main():
         referenceFasta = args.ReferenceFile
 
     pepLens = args.peptideLengths
-    allNMers = buildPeptideTranscriptMap(args.Input, pepLens)
+    allNMers = set()
+    for _, orf in parseFasta(args.Input):
+        allNMers.update(getMHCIPeptidesSet(orf, pepLens))
 
     # TODO DEBUG
-    test_file = open('tests/out/UDP-NoFilter.txt', 'w')
-    for pep, _ in allNMers.items():
+    test_file = open('tests/kmp-hpc/NoFilter.txt', 'w')
+    for pep in allNMers:
         test_file.write(f"{pep}\n")
-    test_file.close()
 
-    # Filtering out canonical peptides
     if referenceFasta:
         referencePepSet = buildReferenceSet(referenceFasta, pepLens)
-        nmersToRemove = referencePepSet & set(allNMers.keys())
-        for pep in nmersToRemove:
-            del allNMers[pep]
+        allNMers -= referencePepSet
 
     pep_file = open(args.Peptides, 'w') if args.Peptides else None
     csv_file = open(args.Csv, 'w') if args.Csv else None
 
-    for pep, transcripts in allNMers.items():
+    for pep in allNMers:
         if pep_file:
             pep_file.write(f"{pep}\n")
         if csv_file:
-            csv_file.write(f'{pep}, {";".join(transcripts)}, {len(transcripts)}\n')
+            csv_file.write(f'{header}, {pep}')
 
     if pep_file:
         pep_file.close()
     if csv_file:
         csv_file.close()
+
 
 if __name__ == '__main__':
     main()
