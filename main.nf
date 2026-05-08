@@ -1,6 +1,7 @@
 // TODO
 // Header - author etc
 include {
+    RUN_PEPSICKLE
     GENERATE_PEPTIDES
 } from './modules/processes/wrapper_processes'
 
@@ -11,9 +12,15 @@ include {
 workflow {
 
     main:
-    // TODO
+    
+    // TODO if statement for if we're cleaving peptides
+    RUN_PEPSICKLE(params.udp_out)
+
     // Process convert protein fasta dbs to peptide dbs
-    GENERATE_PEPTIDES(params.udp_out)
+    // TODO if statement for the cleave parameter
+    // if params.cleave != None:
+    GENERATE_PEPTIDES(params.udp_out, params.refProteome, RUN_PEPSICKLE.out, 
+                        params.pepsickleCleavageThreshold, params.nmers, params.noncanonical)
 
     // TODO
     // Expression Workflow
@@ -24,10 +31,7 @@ workflow {
     // TODO
     // Binding Affinity Workflow (TAP) 
     // - explore adding more tools (CLTAP) or develop own
-    TAP_WORKFLOW(GENERATE_PEPTIDES.out.txt)
-
-    // TODO
-    // Hla Prediction Workflow
+    //TAP_WORKFLOW(GENERATE_PEPTIDES.out.txt)
 
     // TODO
     // Binding Affinity Workflow (MHC)
@@ -42,19 +46,29 @@ workflow {
     // Peptide Prioritisation Workflow
 
     publish:
-        allNmers = GENERATE_PEPTIDES.out.csv
-        tap = TAP_WORKFLOW.out
+        pepsickle = RUN_PEPSICKLE.out
+        allNmersTxt = GENERATE_PEPTIDES.out.txt
+        allNmersCsv = GENERATE_PEPTIDES.out.Csv
+        //tap = TAP_WORKFLOW.out
 }
 
 output {
-    allNmers {
+    pepsickle {
+        path 'pepsickle'
+        mode 'copy'
+    }
+    allNmersTxt {
         path 'allNmers'
         mode 'copy'
     }
-    tap {
-        path 'tap'
+    allNmersCsv {
+        path 'allNmers'
         mode 'copy'
     }
+    // tap {
+    //     path 'tap'
+    //     mode 'copy'
+    // }
 }
 
 // TODO

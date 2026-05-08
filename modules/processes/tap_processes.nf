@@ -1,8 +1,5 @@
 
-
 process PREP_DEEPTAP_INPUT {
-    conda "${params.env_deeptap}"
-
     input:
         path peptides_csv
     output: 
@@ -19,10 +16,13 @@ process RUN_DEEPTAP {
 
     input:
         path peptides_csv
+        //path 'deeptap*.csv'
     output:
-        path "${peptides_csv.baseName}_DeepTAP_cla_predresult.csv", emit: deeptap_out
+        path "${peptides_csv.baseName}_DeepTAP_cla_predresult_rank.csv", emit: deeptap_out
+        //path "deeptap*_DeepTAP_cla_predresult_rank.csv", emit: deeptap_out
     script:
     """
-        python ${params.deeptap} -t cla -f $peptides_csv
+        # python ${params.deeptap} -t cla -f '$peptides_csv' -o "."
+        python ${params.rundeeptap} --deeptap ${params.deeptap} -t cla -f '$peptides_csv' -o "."
     """
 }

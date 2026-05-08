@@ -11,3 +11,11 @@ test.nf
 results/
 .nextflow
 envs
+*.log
+bin/hla-pred/netmhc
+bin/hla-pred/mixmhcpred
+bin/hla-pred/netmhcstabpan
+local/
+tool-analysis/
+dbs/
+input/
