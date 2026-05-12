@@ -97,7 +97,8 @@ def getCleavageIndicesDict(cleaveFile: str, threshold) -> dict:
         for line in f:
             if line[0] != 'p':
                 tokens = line.split()
-                if float(tokens[2]) > threshold:
+                # Terminal peptides are the only ones with a cleavage score of 0 exactly.
+                if float(tokens[2]) > threshold or float(tokens[2]) == 0:
                     transcript = tokens[4]
                     pos = int(tokens[0]) - 1
                     if transcript not in indices:
