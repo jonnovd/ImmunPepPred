@@ -15,8 +15,10 @@ envs
 bin/hla-pred/netmhc
 bin/hla-pred/mixmhcpred
 bin/hla-pred/netmhcstabpan
-local/
 tool-analysis/
 dbs/
 input/
 ahocorasick/
+local/dbs/
+local/logs/  
+local/results/

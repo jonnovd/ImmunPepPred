@@ -49,3 +49,16 @@ process GENERATE_PEPTIDES {
         -l ${nmers_string}
     """
 }
+
+process GET_INPUT_PEPTIDES {
+    input:
+        path peptideFiles  // receives a list: [file1] or [file1, file2]
+
+    output:
+        path 'peptides.txt'
+
+    script:
+    """
+    cat ${peptideFiles} > peptides.txt
+    """
+}

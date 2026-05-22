@@ -1,0 +1,1 @@
+python getPeptidesFromORFs.py -i ../../dbs/human_reference_sequences.fasta -c ../../results/pepsickle/pepsickleRefFasta.txt -t 0.2 -o ../../tool-analysis/mTECs/selfpeps.txt -l 8 9 10 11

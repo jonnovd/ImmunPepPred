@@ -14,9 +14,11 @@ parser.add_argument('-o', '--output-txt', help='Simple Peptides only Output .txt
 parser.add_argument('-O', '--output-csv', help='Output .csv file with transcript ids and peptides')
 parser.add_argument('-l', '--peptide-lengths', nargs='+', type=int, default=[9],
                     help='Peptide lengths to generate (default: 9)')
-# parser.add_argument('-g', '--gff', help='Path/To/ Reference GFF file', default=None)
-# parser.add_argument('-e', '--exclude-genes', help='Path/To/ txt file containing 1 gene symbol per line for genes to remove from the reference set')
+parser.add_argument('-g', '--gff', help='Path/To/ Reference GFF file', default=None)
+parser.add_argument('-e', '--exclude-genes', help='Path/To/ txt file containing 1 gene symbol per line for genes to remove from the reference set')
 args = parser.parse_args()
+
+AAs = set("ARNDCQEGHILKMFPSTWYV")
 
 def extractTranscriptId(header: str, type: str) -> str:
     if type == 'pepsickle':
@@ -43,7 +45,10 @@ def getMHCIPeptidesSet(prot: str, pepLens = [8, 9, 10, 11]):
 
     for pepLen in pepLens:
         for i in range(len(prot) - pepLen + 1):
-            peps.add(prot[i: i + pepLen])
+            pep = prot[i: i + pepLen]
+            # Ensures all valid AAs in pep
+            if set(pep).issubset(AAs):
+                peps.add(pep)
 
     return peps
 
@@ -54,7 +59,10 @@ def getCleavedMHCIPeptidesSet(prot: str, cleavageIndices: list, pepLens = [8, 9,
     for i in cleavageIndices:
         for pepLen in pepLens:
             if i - pepLen > -1:
-                peps.add(prot[i - pepLen: i])
+                pep = prot[i - pepLen: i]
+                # Ensures all valid AAs in pep
+                if set(pep).issubset(AAs):
+                    peps.add(pep)
 
     return peps
 
