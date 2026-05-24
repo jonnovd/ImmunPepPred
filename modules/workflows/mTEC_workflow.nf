@@ -33,7 +33,7 @@ workflow MTEC_WORKFLOW {
         merged_results_ch = MERGE_RESULTS(counts_file_ch.collect(), params.mtec_expression_threshold)
 
     emit:
-        csv = merged_results_ch.csv
-        tsv = merged_results_ch.tsv
+        mtec_raw_counts = merged_results_ch.mtec_raw_counts
+        mtec_expression_classification = merged_results_ch.mtec_expression_classification
 
 }

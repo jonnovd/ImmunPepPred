@@ -104,7 +104,7 @@ process NETMHCSTABPAN {
     output:
     tuple val(batch_number), path ("netmhcstabpan_results_${batch_number}.txt"), emit: out
 
-    publishDir "$projectDir/results/netmhcstabpan", mode: 'copy', pattern: 'netmhcstabpan_results*.txt'
+    //publishDir "$projectDir/results/netmhcstabpan", mode: 'copy', pattern: 'netmhcstabpan_results*.txt'
 
     script:
     def pepLengths_string = params.peptide_lengths.replace('-', ',')

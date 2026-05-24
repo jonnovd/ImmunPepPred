@@ -59,6 +59,8 @@ process GET_INPUT_PEPTIDES {
 
     script:
     """
-    cat ${peptideFiles} > peptides.txt
+    for f in ${peptideFiles}; do
+        sed -e '\$a\\' "\$f" >> peptides.txt
+    done
     """
 }

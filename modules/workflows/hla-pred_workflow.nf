@@ -124,5 +124,5 @@ workflow HLA_WORKFLOW {
     emit:
         // Merge batch results into single table
         out = ch_merged_results.out
-                                .collectFile(keepHeader: true, skip: 1, name: 'final_hla_prediction_results.tsv', storeDir: "${params.hla_out_dir}")
+                                .collectFile(keepHeader: true, skip: 1, name: 'hla_final_prediction_results.tsv')
 }

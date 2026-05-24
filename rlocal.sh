@@ -57,7 +57,7 @@ else
 fi
 
 # ── Build and run the command ─────────────────────────────────────────────────
-CMD="nextflow run $PIPELINE $RESUME_FLAG -params-file local/params.json -output-dir 'local/results'"
+CMD="nextflow run $PIPELINE $RESUME_FLAG -params-file local/params.json"
 
 echo ""
 echo "Running: $CMD"
