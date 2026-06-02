@@ -10,6 +10,6 @@ process RUN_HEX {
         //path "deeptap*_DeepTAP_cla_predresult_rank.csv", emit: deeptap_out
     script:
     """
-        python ${params.pyHex} --peptides $peptides --iedb $iedb_peptides --output pathogenicity_pyHex_out.csv --workers 4
+        python ${params.pyHex} --peptides $peptides --reference $iedb_peptides --output pathogenicity_pyHex_out.csv --workers 4
     """
 }

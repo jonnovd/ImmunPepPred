@@ -63,6 +63,7 @@ workflow HLA_WORKFLOW {
             .splitText()
             .map { it.trim() }
             .toList()
+            //.collate(2)
             .map { it -> it.join(',') }
             .view()
 

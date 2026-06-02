@@ -136,10 +136,12 @@ def main():
                 used_cols.append('MHCnuggets_%Rank')
             elif f.startswith("netmhc"):
                 merged_df = load_netmhcpan_results(f, merged_df)
-                used_cols.append('NetMHCpan_%Rank')
+                if 'NetMHCpan_%Rank' not in used_cols:
+                    used_cols.append('NetMHCpan_%Rank')
             elif f.startswith("mixmhcpred"):
                 merged_df = load_mixmhcpred_results(f, merged_df)
-                used_cols.append('MixMHCpred_%Rank')
+                if 'MixMHCpred_%Rank' not in used_cols:
+                    used_cols.append('MixMHCpred_%Rank')
             elif f.startswith("mhcflurry"):
                 merged_df = load_mhcflurry_results(f, merged_df)
                 used_cols.append('MHCFlurry_%Rank')

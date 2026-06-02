@@ -85,11 +85,14 @@ process NETMHC {
 
     output:
     tuple val(batch_number), path ("netmhc_results_${batch_number}.txt"), emit: out
+    path "*.log", emit: hidden 
 
     //publishDir "${params.out_dir}", mode: 'copy', pattern: 'netmhc_results*.txt'
 
     script:
+    //def first_allele = hla.split(',')[0].replaceAll('[*:]', '_')
     """
+    ${params.netmhc_path} -listMHC | grep "HLA-" > alleles.log
     ${params.netmhc_path} -p ${peptides} -a ${hla} > netmhc_results_${batch_number}.txt
     """
 }
@@ -128,6 +131,7 @@ process MIXMHCPRED {
     //publishDir "${params.log_dir}", mode: 'copy', pattern: '*.log'
 
     script:
+    //def first_allele = hla.split(',')[0].replaceAll('[*:]', '_')
     """
     ${params.hlaScripts_path}/mixmhcpred/MixMHCpred -i ${peptides} -a ${hla} -o mixmhcpred_results_${batch_number}.txt > mixmhcpred_${batch_number}.log
     """
@@ -164,7 +168,7 @@ process MERGERESULTS {
     output:
     path "*_merged_results.txt", emit: out
 
-    publishDir "${params.hla_out_dir}", mode: 'copy', pattern: '*_merged_results.txt'
+    //publishDir "${params.hla_out_dir}", mode: 'copy', pattern: '*_merged_results.txt'
 
     script:
     """

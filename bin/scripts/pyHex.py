@@ -31,7 +31,7 @@ for i, aa1 in enumerate(AA_ORDER):
 # I/O
 # ---------------------------------------------------------------------------
 
-def read_iedb(fasta_file):
+def read_reference(fasta_file):
     sequences = []
     with open(fasta_file, "r") as f:
         for line in f:
@@ -86,7 +86,7 @@ def encode_sequences(sequences):
 # Core vectorised scoring for one length group
 # ---------------------------------------------------------------------------
 
-def score_length_group(peptides, iedb_encoded, weights):
+def score_length_group(peptides, reference_encoded, weights):
     """
     Score all peptides of a given length against the corresponding IEDB
     reference matrix in one vectorised pass.
@@ -94,7 +94,7 @@ def score_length_group(peptides, iedb_encoded, weights):
     Parameters
     ----------
     peptides    : (P, L) int32 array  — encoded query peptides
-    iedb_encoded: (R, L) int32 array  — encoded IEDB references
+    reference_encoded: (R, L) int32 array  — encoded IEDB references
     weights     : (L,)   int32 array  — positional weights
 
     Returns
@@ -102,17 +102,17 @@ def score_length_group(peptides, iedb_encoded, weights):
     (P,) float32 array of best scores, one per query peptide.
     """
     P, L = peptides.shape
-    R     = iedb_encoded.shape[0]
+    R     = reference_encoded.shape[0]
 
     # BLOSUM62 scores for all (reference, peptide, position) triples
     # blosum_scores[r, p, pos] = BLOSUM62_MATRIX[iedb[r, pos], peptide[p, pos]]
     #
     # Achieved without an explicit loop:
-    #   - iedb_encoded[:, None, :]  → (R, 1, L)  broadcast over peptides
+    #   - reference_encoded[:, None, :]  → (R, 1, L)  broadcast over peptides
     #   - peptides[None, :, :]      → (1, P, L)  broadcast over references
     # Indexing BLOSUM62_MATRIX with two (R, P, L) arrays gives (R, P, L) scores.
     blosum_scores = BLOSUM62_MATRIX[
-        iedb_encoded[:, None, :],   # row indices    (R, 1, L)
+        reference_encoded[:, None, :],   # row indices    (R, 1, L)
         peptides[None, :, :]        # column indices (1, P, L)
     ]                               # result: (R, P, L)
 
@@ -139,11 +139,11 @@ def score_length_group(peptides, iedb_encoded, weights):
 
 def _worker(args):
     """Process one length group; called in a subprocess."""
-    length, peptide_strings, iedb_strings, magic_number = args
+    length, peptide_strings, ref_strings, magic_number = args
     weights      = get_sequence_weights(length, magic_number)
     peptides_enc = encode_sequences(peptide_strings)
-    iedb_enc     = encode_sequences(iedb_strings)
-    best_scores  = score_length_group(peptides_enc, iedb_enc, weights)
+    ref_enc     = encode_sequences(ref_strings)
+    best_scores  = score_length_group(peptides_enc, ref_enc, weights)
     return list(zip(peptide_strings, best_scores.tolist()))
 
 
@@ -151,7 +151,7 @@ def _worker(args):
 # Main scoring entry point
 # ---------------------------------------------------------------------------
 
-def score_all_peptides(peptides, iedb_sequences, magic_number=4, n_workers=None):
+def score_all_peptides(peptides, reference_sequences, magic_number=4, n_workers=None):
     """
     Score all peptides against the IEDB reference, grouped by length so that
     each length group is processed as a single vectorised batch.
@@ -166,18 +166,18 @@ def score_all_peptides(peptides, iedb_sequences, magic_number=4, n_workers=None)
     for p in peptides:
         peptides_by_length[len(p)].append(p)
 
-    iedb_by_length = defaultdict(list)
-    for s in iedb_sequences:
-        iedb_by_length[len(s)].append(s)
+    reference_by_length = defaultdict(list)
+    for s in reference_sequences:
+        reference_by_length[len(s)].append(s)
 
     # Build work units — only lengths that appear in both sets
     jobs = []
     no_match_lengths = set()
     for length, peps in peptides_by_length.items():
-        if length not in iedb_by_length:
+        if length not in reference_by_length:
             no_match_lengths.add(length)
             continue
-        jobs.append((length, peps, iedb_by_length[length], magic_number))
+        jobs.append((length, peps, reference_by_length[length], magic_number))
 
     results = {}
 
@@ -204,15 +204,15 @@ def main():
         description="Score peptides by similarity to an IEDB pathogen reference database."
     )
     parser.add_argument("--peptides",    required=True, help="Input file: one peptide per line.")
-    parser.add_argument("--iedb",        required=True, help="IEDB reference FASTA file.")
+    parser.add_argument("--reference",        required=True, help="Reference FASTA file.")
     parser.add_argument("--output",      required=True, help="Output CSV: peptide, similarity_score.")
     parser.add_argument("--magic-number",type=int, default=4, help="Weight scaling factor (default: 4).")
     parser.add_argument("--workers",     type=int, default=None, help="Number of CPU cores to use (default: all).")
     args = parser.parse_args()
 
-    print(f"Loading IEDB reference: {args.iedb}")
-    iedb_sequences = read_iedb(args.iedb)
-    print(f"  {len(iedb_sequences)} sequences loaded.")
+    print(f"Loading Reference reference: {args.reference}")
+    reference_sequences = read_reference(args.reference)
+    print(f"  {len(reference_sequences)} sequences loaded.")
 
     print(f"Loading peptides: {args.peptides}")
     peptides = read_peptides(args.peptides)
@@ -221,7 +221,7 @@ def main():
     print(f"Scoring with {args.workers or cpu_count()} worker(s)...")
     results = score_all_peptides(
         peptides,
-        iedb_sequences,
+        reference_sequences,
         magic_number=args.magic_number,
         n_workers=args.workers,
     )

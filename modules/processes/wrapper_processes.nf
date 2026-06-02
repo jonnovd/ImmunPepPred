@@ -64,3 +64,31 @@ process GET_INPUT_PEPTIDES {
     done
     """
 }
+
+process RUN_PATHOGENICITY {
+    conda "${params.env_pathogenicity}"
+
+    input:
+        path peptides
+        path iedb_peptides
+    output:
+        path "pathogenicity_pyHex_out.csv", emit: pyhex_out
+    script:
+    """
+        python ${params.pyHex} --peptides $peptides --reference $iedb_peptides --output pathogenicity_pyHex_out.csv --workers 4
+    """
+}
+
+process RUN_SELF_SIMILARITY {
+    conda "${params.env_pathogenicity}"
+
+    input:
+        path peptides
+        path benign_self_peptides
+    output:
+        path "selfsimilarity_pyHex_out.csv", emit: pyhex_out
+    script:
+    """
+        python ${params.pyHex} --peptides $peptides --reference $benign_self_peptides --output selfsimilarity_pyHex_out.csv --workers 4
+    """
+}

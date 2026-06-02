@@ -6,6 +6,13 @@ def read_file(file_path):
     with open(file_path, 'r') as file:
         return [line.strip() for line in file if line.strip()]
 
+# Jonathan added to account for input not containing a star:
+def read_alleleFile(file_path):
+    """Reads a file and returns a list of lines."""
+    with open(file_path, 'r') as file:
+        return [re.sub(r'([A-Z])(\d{2}:\d{2})', r'\1*\2', line.strip()) 
+                for line in file if line.strip()]
+
 def generate_pairs(peptides, hla_types):
     """Generates all pairs of peptides and HLA types."""
     return [{"peptide": peptide, "allele": hla} for peptide in peptides for hla in hla_types]
