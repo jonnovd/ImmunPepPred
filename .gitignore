@@ -25,3 +25,4 @@ local/results/
 bin/PRIME-2.1.zip
 bin/DeepImmuno/
 bin/PRIME-2.1/
+*.venv
