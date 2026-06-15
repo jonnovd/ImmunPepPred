@@ -15,13 +15,13 @@ process BUILD_AUTOMATON {
 process SEARCH_MTECS {
     conda "${params.env_mtec}"
     input:
-        tuple path(automaton), path(peptide_file), path(mtec_file), val(batch_number)//tuple path(mtec_file), val(batch_number)
+        tuple path(automaton), path(peptide_file), path(mtec_file)//, val(batch_number)//tuple path(mtec_file), val(batch_number)
 
     output:
-        path "mtec_peptide_counts_${batch_number}.tsv", emit: pepCounts
+        path "mtec_peptide_counts_${mtec_file.baseName}.tsv", emit: pepCounts
 
     """
-        python ${params.search_mtecs} -a $automaton -p $peptide_file -s $mtec_file -o "mtec_peptide_counts_${batch_number}.tsv"
+        python ${params.search_mtecs} -a $automaton -p $peptide_file -s $mtec_file -o "mtec_peptide_counts_${mtec_file.baseName}.tsv"
     """
 
 }

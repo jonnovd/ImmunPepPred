@@ -24,7 +24,7 @@ workflow MTEC_WORKFLOW {
         // Convert to Channel containing: file, batch_number
         // BUG: If you decide to split the mtec read files, we may get a bug here,
         // depending on how you name the split files
-        mtec_files_ch = mtec_files_ch.map { file -> [file, ("${file.baseName}" =~ /_(\d+)$/)[0][1]]}
+        // mtec_files_ch = mtec_files_ch.map { file -> [file, ("${file.baseName}" =~ /_(\d+)(?:_|$)/)[0][1]]}
                                     //.view() // To print to terminal for debug
 
         search_ch       = automaton_ch.combine(peptide_file_ch).combine(mtec_files_ch)

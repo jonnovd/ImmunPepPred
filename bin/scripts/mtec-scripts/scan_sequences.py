@@ -36,6 +36,16 @@ REPORT_EVERY = 10_000_000
 def log(msg: str) -> None:
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", file=sys.stderr, flush=True)
 
+def get_num_peps(peptides_file: str) -> int:
+    count = 0
+    with open(peptides_file, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                count += 1
+
+    return count
+
 
 # ── Load ───────────────────────────────────────────────────────────────────────
 
@@ -54,7 +64,7 @@ def load_automaton(path: str) -> ahocorasick.Automaton:
 
 # ── Scan ───────────────────────────────────────────────────────────────────────
 
-def scan_sequences(path: str, automaton: ahocorasick.Automaton) -> list[int]:
+def scan_sequences(path: str, automaton: ahocorasick.Automaton, numPeps: int) -> list[int]:
     """
     Stream sequences file line by line, running each sequence through
     the automaton. Returns a counts array indexed by peptide_id (0-based).
@@ -64,7 +74,7 @@ def scan_sequences(path: str, automaton: ahocorasick.Automaton) -> list[int]:
     and suffix patterns are all reported correctly.
     """
     log(f"Scanning sequences from: {path}")
-    counts = [0] * len(automaton)   # 0-based: counts[pep_id - 1]
+    counts = [0] * numPeps   # 0-based: counts[pep_id - 1]
     seq_count = 0
     match_count = 0
 
@@ -99,7 +109,7 @@ def write_output(inpath: str, outpath: str, counts: list[int]) -> None:
     log(f"Writing output to: {outpath}")
 
     with open(inpath, "r") as inFile:
-        with open(outpath, "w", buffering=8 * 1024 * 1024) as f:
+        with open(outpath, "w") as f:
             id = 1
             for line in inFile:
                 pep = line.strip()
@@ -122,6 +132,8 @@ def main() -> None:
     parser.add_argument("-o", "--output_file",     help="TSV output: peptide<tab>count")
     args = parser.parse_args()
 
+    numPeps = get_num_peps(args.peptides_file)
+
     total_start = time.time()
     log("=== Sequence Scanner ===")
 
@@ -130,7 +142,7 @@ def main() -> None:
     log(f"  Load done in {time.time() - t0:.1f}s")
 
     t0 = time.time()
-    counts = scan_sequences(args.sequences_file, automaton)
+    counts = scan_sequences(args.sequences_file, automaton, numPeps)
     log(f"  Scan done in {time.time() - t0:.1f}s")
 
     t0 = time.time()

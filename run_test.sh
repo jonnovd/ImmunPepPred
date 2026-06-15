@@ -1,7 +1,7 @@
 #!/bin/bash
-#PBS -N tainNeg1
-#PBS -o trainNeg1.log
-#PBS -lselect=1:ncpus=4:mem=128gb
+#PBS -N mtec3
+#PBS -o mtec3.log
+#PBS -lselect=1:ncpus=1:mem=128gb
 #PBS -lwalltime=12:00:00
 #PBS -j oe
 

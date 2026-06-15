@@ -53,7 +53,7 @@ def concatenate_counts(input_paths: list[str], output_path: str) -> None:
 
         log(f"Writing merged output to: {output_path}")
 
-        with open(output_path, "w", buffering=8 * 1024 * 1024) as out:
+        with open(output_path, "w") as out:
 
             # Write header: one column per input file plus a total column
             header_cols = "\t".join(f"count_{i+1}" for i in range(n_files))
@@ -88,16 +88,16 @@ def concatenate_counts(input_paths: list[str], output_path: str) -> None:
 
 def get_mtec_expression_file(inFilePath: str, outFilePath: str, threshold: int):
     with open(inFilePath, 'r') as inFile:
-        with open(outFilePath, "w", buffering=8 * 1024 * 1024) as out:
+        with open(outFilePath, "w") as out:
             for line in inFile:
                 line = line.strip()
                 if line:
                     if line.startswith('p'):
                         out.write("peptide,mtec_expression\n")
                     else:
-                        parts = line.split()
+                        parts = line.split('\t')
                         pep   = parts[0]
-                        total = parts[-1]
+                        total = int(parts[-1])
                         if total > threshold:
                             out.write(f"{pep},{1}\n")
                         else:
@@ -133,7 +133,7 @@ def main() -> None:
 
     log(f"=== Total wall time: {time.time() - total_start:.1f}s ===")
 
-    get_mtec_expression_file(args.output_file, args.output_expression_file, args.threshold)
+    get_mtec_expression_file(args.output_file, args.output_expression_file, int(args.threshold))
 
 
 if __name__ == "__main__":
