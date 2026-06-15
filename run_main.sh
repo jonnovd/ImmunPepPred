@@ -1,8 +1,8 @@
 #!/bin/bash
-#PBS -N ipp
-#PBS -lselect=1:ncpus=8:mem=64gb
+#PBS -N allMtecs
+#PBS -lselect=1:ncpus=4:mem=32gb
 #PBS -lwalltime=24:00:00
-#PBS -o ipp.log
+#PBS -o allMtecs.log
 #PBS -j oe
 
 cd $PBS_O_WORKDIR

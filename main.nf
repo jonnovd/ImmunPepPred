@@ -110,14 +110,14 @@ workflow {
             // Uses 107 Gb of RAM when running against 24k pathogen peptides
             RUN_PATHOGENICITY(GET_INPUT_PEPTIDES.out.splitText(by: 400000, file: true), params.iedb_peptides) // params.batchSize*5
 
-            outFiles = outFiles.mix(RUN_PATHOGENICITY.out)
+            outFiles = outFiles.mix(RUN_PATHOGENICITY.out.collectFile(name: 'pathogenicity_pyHex_out.csv'))
         }
 
         if (params.use_selfsimilarity) { 
             // 1.3M self peptide sequences
             RUN_SELF_SIMILARITY(GET_INPUT_PEPTIDES.out.splitText(by: 200000, file: true), params.benign_self_peptides) // params.batchSize*5
 
-            outFiles = outFiles.mix(RUN_SELF_SIMILARITY.out)
+            outFiles = outFiles.mix(RUN_SELF_SIMILARITY.out.collectFile(name: "selfsimilarity_pyHex_out.csv"))
         }
 
         if (params.use_deepimmuno) {
@@ -151,127 +151,7 @@ output {
             def dirName = file.baseName.contains('_') ? file.baseName.split('_')[0] : file.baseName
             "${params.outputDir}/${dirName}/"
         }
-        // path {
-        //     file ->
-        //     file.mtec_csv >> "mtecTest/"
-        // }
-        // path { file ->
-        //     println "DEBUG file: ${file}"
-        //     println "DEBUG file.name: ${file.name}"
-        //     println "DEBUG file.class: ${file.class}"
-        //     println "DEBUG file.baseName: ${file.baseName}"
-        //     println "DEBUG file.parent: ${file.parent}"
-        //     println "\n"
-        //     "${file.name}/"
-        // }
-    }
-    // hex {
-    //     path 'hex'
-    //     mode 'copy'
-    // }
-    // allNmers {
-    //     path 'allNmers'
-    //     mode 'copy'
-    // }
-
-    // tap {
-    //     path 'tap'
-    //     mode 'copy'
-    // }
+        mode 'copy'
+        
+    } 
 }
-
-
-
-// include {
-//     RUN_PEPSICKLE as RUN_PEPSICKLE_INPUT
-//     RUN_PEPSICKLE as RUN_PEPSICKLE_REF
-//     GENERATE_PEPTIDES
-// } from './modules/processes/wrapper_processes'
-
-// include { 
-//     TAP_WORKFLOW
-// } from './modules/workflows/tap_workflow'
-
-// include { 
-//     HLA_WORKFLOW
-// } from './modules/workflows/hla-pred_workflow'
-
-// include {
-//     RUN_HEX
-// } from './modules/processes/pathogenicity'
-
-// workflow {
-    
-//     main: 
-
-//         def pepsickle_inFasta_ch = channel.fromPath(params.inputFasta)
-//                                 .splitFasta(by: params.batchSize, file: true)
-        
-//         // def refFasta_ch = channel.fromPath(params.refProteome)
-//         //                         .splitFasta(by: params.batchSize, file: true)
-
-//         RUN_PEPSICKLE_INPUT(pepsickle_inFasta_ch)
-//         // RUN_PEPSICKLE_REF(refFasta_ch)
-
-//         def pepsickle_inFasta_out_ch  = RUN_PEPSICKLE_INPUT.out.collectFile(name: 'pepsickleInFasta.txt')
-//         //def pepsickle_refFasta_out_ch = //RUN_PEPSICKLE_REF.out.collectFile(name: 'pepsickleRefFasta.txt')
-
-//         // Process convert protein fasta dbs to peptide dbs
-//         // TODO if statement for the cleave parameter
-//         // if params.cleave != None:
-//         //GENERATE_PEPTIDES(inFasta_ch.peptides, params.refProteome, pepsickle_out_ch, params.pepsickleCleavageThreshold, params.peptide_lengths, params.noncanonical)
-//         // TODO - issue here if the pepsickle_out_ch is empty if we don't want to use pepsickle cleavage??
-//         // Perhaps change in the python file, that cleavage must be used, but can set threshold to 1, and then a simple if to skip the cleavage filtering in the python file
-//         // Still think about what this means for the RUN_PEPSICKLE process
-
-//         // TODO (BUG) splitting inFasta into diff processes, means duplication of peptides in the results
-//         // peptideTranscriptMap is only built locally for each process, so many peptides coming from multiple transcripts will be duplicated
-//         // GENERATE_PEPTIDES(params.inputFasta.combine(pepsickle_inFasta_out_ch).combine(pepsickle_refFasta_out_ch), 
-//         //                 params.refProteome, params.refGff, params.genesToRemoveFromRef, 
-//         //                 params.pepsickleCleavageThreshold, params.peptide_lengths, params.noncanonical)
-        
-//         def genPep_input_ch = channel.fromPath(params.inputFasta) 
-
-//         GENERATE_PEPTIDES(genPep_input_ch.combine(pepsickle_inFasta_out_ch), //.combine(pepsickle_refFasta_out_ch), 
-//                         params.refProteome, params.refGff, params.genesToRemoveFromRef, 
-//                         params.pepsickleCleavageThreshold, params.peptide_lengths, params.filter)
-
-//         // def gepPepOut_ch = GENERATE_PEPTIDES.out.txt
-
-//         // Process for mTEC expression
-
-//         // HLA-pred
-//         // def hlaPredPeptideFile_ch   = GENERATE_PEPTIDES.out.txt
-//         // hlaPredFile_ch              = HLA_WORKFLOW(hlaPredPeptideFile_ch)
-        
-
-//         // TODO TCR BA prediction
-
-//         // def tap_in_ch = GENERATE_PEPTIDES.out.txt.splitText(by: params.batchSize*3, file: true)
-//         // TAP_WORKFLOW(tap_in_ch)
-
-//         RUN_HEX(GENERATE_PEPTIDES.out.txt.splitText(by: params.batchSize*5, file: true), params.iedb_peptides)
-
-//     publish:
-//         hex = RUN_HEX.out.collectFile(name: 'hexOut.csv')
-//         allNmers = GENERATE_PEPTIDES.out.txt.collectFile(name: 'anyXnmers.txt') // Just a way to name the file, not particularly correct
-//         //excludedGenes = GENERATE_PEPTIDES.out.log.collectFile(name: 'excluded_genes-symbols.log')
-//         //intermediates = GENERATE_PEPTIDES.out.txt
-//         // tap = TAP_WORKFLOW.out.collectFile(name: 'test.txt')
-// }
-
-// output {
-//     hex {
-//         path 'hex'
-//         mode 'copy'
-//     }
-//     allNmers {
-//         path 'allNmers'
-//         mode 'copy'
-//     }
-
-//     // tap {
-//     //     path 'tap'
-//     //     mode 'copy'
-//     // }
-// }
