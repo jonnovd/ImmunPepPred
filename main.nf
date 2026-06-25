@@ -115,7 +115,7 @@ workflow {
 
         if (params.use_selfsimilarity) { 
             // 1.3M self peptide sequences
-            RUN_SELF_SIMILARITY(GET_INPUT_PEPTIDES.out.splitText(by: 200000, file: true), params.benign_self_peptides) // params.batchSize*5
+            RUN_SELF_SIMILARITY(GET_INPUT_PEPTIDES.out.splitText(by: 20000, file: true), params.benign_self_peptides) // params.batchSize*5
 
             outFiles = outFiles.mix(RUN_SELF_SIMILARITY.out.collectFile(name: "selfsimilarity_pyHex_out.csv"))
         }
