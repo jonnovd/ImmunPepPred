@@ -26,4 +26,5 @@ bin/PRIME-2.1.zip
 bin/DeepImmuno/
 bin/PRIME-2.1/
 *.venv
-models/data
+models/data/*immunogenicity*
+models/data/*hla*
