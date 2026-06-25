@@ -2,8 +2,12 @@
 """
 sample_peptides.py
 ------------------
-Randomly samples N peptides from a protein/polypeptide FASTA file,
-drawing from defined length groups according to user-specified ratios.
+Randomly samples N peptides (contiguous subsequences) from protein ORFs
+in a FASTA file. Each sampled peptide is a random window cut from a
+randomly chosen source sequence.
+
+The LENGTH_RATIOS constant controls how many of the N peptides will be
+drawn at each peptide length defined in PEPTIDE_LENGTHS.
 
 Usage:
     python sample_peptides.py <input.fasta> <n_peptides> [output.fasta]
@@ -17,31 +21,18 @@ Arguments:
 import sys
 import random
 import math
-from collections import defaultdict
 
 # =============================================================================
-# CONFIGURATION — edit these values to control length groups and their ratios
+# CONFIGURATION — edit these values to control peptide lengths and their ratios
 # =============================================================================
 
-# Define peptide length groups as (min_aa, max_aa) inclusive ranges.
-# Sequences shorter than the first group's min or longer than the last
-# group's max are silently excluded from sampling.
-LENGTH_GROUPS: list[tuple[int, int]] = [
-    (8,   8),   # Short peptides       (e.g. 7–11 aa)
-    (9,  9),   # Medium-short         (e.g. 12–20 aa)
-    (10,  10),   # Medium               (e.g. 21–50 aa)
-    (11, 11),   # Medium-long          (e.g. 51–100 aa)
-]
+# Peptide lengths to sample (in amino acids).
+PEPTIDE_LENGTHS: list[int] = [8, 9, 10, 11]
 
-# Relative sampling ratios for each length group (must match LENGTH_GROUPS length).
+# Relative sampling ratios for each length in PEPTIDE_LENGTHS (same order).
 # These need not sum to 1 or 100 — they are normalised automatically.
-# Example below draws roughly: 10% short, 30% medium-short, 40% medium, 20% medium-long.
-LENGTH_RATIOS: list[float] = [
-    0.10,   # short
-    0.30,   # medium-short
-    0.40,   # medium
-    0.20,   # medium-long
-]
+# Example below draws equal numbers of each length.
+LENGTH_RATIOS: list[float] = [350, 6100, 2400, 800]
 
 # Random seed for reproducibility. Set to None for a truly random run.
 RANDOM_SEED: int | None = 42
@@ -52,35 +43,27 @@ RANDOM_SEED: int | None = 42
 
 
 def validate_config() -> None:
-    """Raise informative errors if the configuration constants are inconsistent."""
-    if len(LENGTH_GROUPS) != len(LENGTH_RATIOS):
+    if len(PEPTIDE_LENGTHS) != len(LENGTH_RATIOS):
         raise ValueError(
-            f"LENGTH_GROUPS has {len(LENGTH_GROUPS)} entries but "
+            f"PEPTIDE_LENGTHS has {len(PEPTIDE_LENGTHS)} entries but "
             f"LENGTH_RATIOS has {len(LENGTH_RATIOS)}. They must be the same length."
         )
     if any(r < 0 for r in LENGTH_RATIOS):
         raise ValueError("All values in LENGTH_RATIOS must be >= 0.")
     if sum(LENGTH_RATIOS) == 0:
         raise ValueError("At least one value in LENGTH_RATIOS must be > 0.")
-    for i, (lo, hi) in enumerate(LENGTH_GROUPS):
-        if lo > hi:
-            raise ValueError(
-                f"LENGTH_GROUPS[{i}] has min={lo} > max={hi}. min must be <= max."
-            )
+    if any(l < 1 for l in PEPTIDE_LENGTHS):
+        raise ValueError("All values in PEPTIDE_LENGTHS must be >= 1.")
 
 
 def parse_fasta(path: str) -> list[tuple[str, str]]:
-    """
-    Parse a FASTA file and return a list of (header, sequence) tuples.
-    Multi-line sequences are concatenated. Whitespace inside sequences
-    is stripped. Empty sequences are skipped with a warning.
-    """
+    """Parse a FASTA file, returning a list of (header, sequence) tuples."""
     records: list[tuple[str, str]] = []
     header: str | None = None
     seq_parts: list[str] = []
 
     with open(path, "r") as fh:
-        for line_no, raw_line in enumerate(fh, start=1):
+        for raw_line in fh:
             line = raw_line.strip()
             if not line:
                 continue
@@ -92,143 +75,62 @@ def parse_fasta(path: str) -> list[tuple[str, str]]:
                     else:
                         print(f"  Warning: empty sequence for '{header}', skipping.",
                               file=sys.stderr)
-                header = line[1:]   # strip the leading '>'
+                header = line[1:]
                 seq_parts = []
             else:
                 seq_parts.append(line.replace(" ", "").replace("\t", ""))
 
-    # Flush the last record
     if header is not None:
         seq = "".join(seq_parts)
         if seq:
             records.append((header, seq))
-        else:
-            print(f"  Warning: empty sequence for '{header}', skipping.",
-                  file=sys.stderr)
 
     return records
 
 
-def assign_to_groups(
-    records: list[tuple[str, str]],
-    groups: list[tuple[int, int]],
-) -> dict[int, list[tuple[str, str]]]:
+def compute_sample_counts(n_total: int, ratios: list[float]) -> list[int]:
     """
-    Bucket each (header, sequence) record into the appropriate length group.
-
-    Returns a dict keyed by group index (0-based), containing only records
-    whose sequence length falls within that group's [min, max] range.
-    Sequences that fall outside every group are counted and reported.
+    Divide n_total into per-length counts according to normalised ratios.
+    Uses largest-remainder method to ensure counts sum exactly to n_total.
     """
-    buckets: dict[int, list[tuple[str, str]]] = defaultdict(list)
-    out_of_range = 0
-
-    for header, seq in records:
-        length = len(seq)
-        placed = False
-        for idx, (lo, hi) in enumerate(groups):
-            if lo <= length <= hi:
-                buckets[idx].append((header, seq))
-                placed = True
-                break
-        if not placed:
-            out_of_range += 1
-
-    if out_of_range:
-        print(
-            f"  Note: {out_of_range} sequence(s) fell outside all length groups "
-            "and were excluded from sampling.",
-            file=sys.stderr,
-        )
-
-    return buckets
-
-
-def compute_sample_counts(
-    n_total: int,
-    ratios: list[float],
-    available: list[int],
-) -> list[int]:
-    """
-    Allocate n_total samples across groups according to normalised ratios,
-    respecting per-group availability caps.
-
-    Uses an iterative approach: allocate by ratio, cap at availability,
-    redistribute remainder to uncapped groups until stable.
-
-    Returns a list of sample counts (same length as ratios).
-    """
-    n_groups = len(ratios)
     total_ratio = sum(ratios)
-    norm = [r / total_ratio for r in ratios]
+    exact = [(r / total_ratio) * n_total for r in ratios]
+    floors = [math.floor(e) for e in exact]
+    remainders = [(exact[i] - floors[i], i) for i in range(len(ratios))]
 
-    counts = [0] * n_groups
-    remaining = n_total
-    free_groups = set(range(n_groups))   # groups not yet capped
+    shortfall = n_total - sum(floors)
+    # Award remaining slots to the groups with the largest fractional parts
+    for _, i in sorted(remainders, reverse=True)[:shortfall]:
+        floors[i] += 1
 
-    for _iteration in range(n_groups + 1):  # at most n_groups capping rounds
-        if not free_groups or remaining == 0:
-            break
+    return floors
 
-        # Renormalise over free groups only
-        free_ratio_sum = sum(norm[i] for i in free_groups)
-        if free_ratio_sum == 0:
-            break
 
-        new_free: set[int] = set()
-        allocated_this_round = 0
-
-        for i in sorted(free_groups):
-            share = (norm[i] / free_ratio_sum) * remaining
-            alloc = min(math.floor(share), available[i])
-            counts[i] = alloc
-            allocated_this_round += alloc
-            if alloc < available[i]:
-                new_free.add(i)
-
-        remaining -= allocated_this_round
-        free_groups = new_free
-
-    # Distribute any leftover (due to floor rounding) one-by-one
-    # to groups that still have capacity, in ratio order (largest first)
-    if remaining > 0:
-        order = sorted(free_groups, key=lambda i: -norm[i])
-        for i in order:
-            if remaining == 0:
-                break
-            gap = available[i] - counts[i]
-            add = min(gap, remaining)
-            counts[i] += add
-            remaining -= add
-
-    if remaining > 0:
-        print(
-            f"  Warning: could only allocate {n_total - remaining} of {n_total} "
-            "requested peptides (insufficient sequences in some length groups).",
-            file=sys.stderr,
-        )
-
-    return counts
+def sample_peptide(sequence: str, length: int, rng: random.Random) -> str:
+    """Return a single random contiguous subsequence of the given length."""
+    max_start = len(sequence) - length
+    start = rng.randint(0, max_start)
+    return sequence[start : start + length]
 
 
 def write_fasta(records: list[tuple[str, str]], path: str, line_width: int = 60) -> None:
-    """Write (header, sequence) records to a FASTA file."""
     with open(path, "w") as fh:
         for header, seq in records:
             fh.write(f">{header}\n")
             for start in range(0, len(seq), line_width):
                 fh.write(seq[start : start + line_width] + "\n")
 
+def write_txt(records: list[tuple[str, str]], path: str, line_width: int = 60) -> None:
+    with open(path, "w") as fh:
+        for _, seq in records:
+            fh.write(f'{seq}\n')
 
 def main() -> None:
-    # ------------------------------------------------------------------
-    # Argument parsing
-    # ------------------------------------------------------------------
     if len(sys.argv) < 3:
         print(__doc__)
         sys.exit(1)
 
-    input_path  = sys.argv[1]
+    input_path = sys.argv[1]
     try:
         n_peptides = int(sys.argv[2])
     except ValueError:
@@ -240,15 +142,9 @@ def main() -> None:
 
     output_path = sys.argv[3] if len(sys.argv) >= 4 else "sampled_peptides.fasta"
 
-    # ------------------------------------------------------------------
-    # Validate configuration
-    # ------------------------------------------------------------------
     validate_config()
 
-    # ------------------------------------------------------------------
-    # Seed RNG
-    # ------------------------------------------------------------------
-    random.seed(RANDOM_SEED)
+    rng = random.Random(RANDOM_SEED)
     if RANDOM_SEED is not None:
         print(f"Random seed: {RANDOM_SEED}")
 
@@ -256,49 +152,56 @@ def main() -> None:
     # Parse input
     # ------------------------------------------------------------------
     print(f"Parsing '{input_path}' …")
-    records = parse_fasta(input_path)
-    print(f"  {len(records)} sequences loaded.")
+    all_records = parse_fasta(input_path)
+    print(f"  {len(all_records)} sequences loaded.")
 
     # ------------------------------------------------------------------
-    # Bucket into length groups
+    # Compute how many peptides to draw at each length
     # ------------------------------------------------------------------
-    print("Assigning sequences to length groups …")
-    buckets = assign_to_groups(records, LENGTH_GROUPS)
+    sample_counts = compute_sample_counts(n_peptides, LENGTH_RATIOS)
 
+    max_peptide_len = max(PEPTIDE_LENGTHS)
     total_ratio = sum(LENGTH_RATIOS)
-    norm_ratios = [r / total_ratio for r in LENGTH_RATIOS]
+    norm_ratios  = [r / total_ratio for r in LENGTH_RATIOS]
 
-    print(f"\n{'Group':<6} {'Range (aa)':<14} {'Ratio':>7} {'Available':>10} {'Target':>8}")
-    print("-" * 50)
-
-    available_counts = [len(buckets.get(i, [])) for i in range(len(LENGTH_GROUPS))]
-    sample_counts    = compute_sample_counts(n_peptides, LENGTH_RATIOS, available_counts)
-
-    for i, ((lo, hi), ratio, avail, target) in enumerate(
-        zip(LENGTH_GROUPS, norm_ratios, available_counts, sample_counts)
-    ):
-        print(f"{i:<6} {f'{lo}–{hi}':<14} {ratio:>7.2%} {avail:>10,} {target:>8,}")
-
-    total_sampled = sum(sample_counts)
-    print("-" * 50)
-    print(f"{'TOTAL':<6} {'':<14} {'':>7} {sum(available_counts):>10,} {total_sampled:>8,}\n")
+    print(f"\n{'Length (aa)':<14} {'Ratio':>8} {'Count':>8}")
+    print("-" * 33)
+    for length, ratio, count in zip(PEPTIDE_LENGTHS, norm_ratios, sample_counts):
+        print(f"{length:<14} {ratio:>8.2%} {count:>8,}")
+    print("-" * 33)
+    print(f"{'TOTAL':<14} {'':>8} {sum(sample_counts):>8,}\n")
 
     # ------------------------------------------------------------------
-    # Sample
+    # Sample peptides for each length group
     # ------------------------------------------------------------------
     sampled: list[tuple[str, str]] = []
-    for i, count in enumerate(sample_counts):
-        pool = buckets.get(i, [])
-        draw = random.sample(pool, count)
-        sampled.extend(draw)
 
-    # Shuffle the final list so groups are interleaved rather than blocked
-    random.shuffle(sampled)
+    for length, count in zip(PEPTIDE_LENGTHS, sample_counts):
+        # Only sequences long enough to yield a peptide of this length are eligible
+        eligible = [rec for rec in all_records if len(rec[1]) >= length]
+
+        if not eligible:
+            print(
+                f"  Warning: no sequences are long enough to yield peptides of "
+                f"length {length} aa. Skipping {count} peptide(s).",
+                file=sys.stderr,
+            )
+            continue
+
+        for i in range(count):
+            header, seq = rng.choice(eligible)
+            peptide_seq  = sample_peptide(seq, length, rng)
+            # Label: source protein | peptide length | sample index (1-based)
+            peptide_header = f"peptide_len{length}_{i+1} source={header}"
+            sampled.append((peptide_header, peptide_seq))
+
+    # Shuffle so lengths are interleaved in the output file
+    # rng.shuffle(sampled)
 
     # ------------------------------------------------------------------
     # Write output
     # ------------------------------------------------------------------
-    write_fasta(sampled, output_path)
+    write_txt(sampled, output_path)
     print(f"Wrote {len(sampled)} sampled peptides to '{output_path}'.")
 
 
