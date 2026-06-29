@@ -47,6 +47,17 @@ def process_hla_file(filepath: str) -> pd.DataFrame:
     df = df.drop_duplicates(subset=['peptide'])
     return df
 
+def process_hla_file_extended_features(filepath: str) -> pd.DataFrame:
+    """
+    """
+    df = pd.read_csv(filepath)
+    df = df[['peptide', 'best_rank', 'avg_rank', 'best_netmhc_r', 'best_mixmhc_r', 'best_mhcflurry_r', 'best_mhcnuggets_r','weak_binders_count', 'strong_binders_count']]
+    df.rename(columns={'best_rank':'hla_best_rank'}, inplace=True)
+
+    _validate_peptide_column(df, filepath)
+    df = df.drop_duplicates(subset=['peptide'])
+    return df
+
 
 def process_default_file(filepath: str) -> pd.DataFrame:
     """
@@ -90,6 +101,7 @@ def load_and_process_file(filepath: str) -> pd.DataFrame:
 
     if "hla" in name:
         print(f"  [HLA]     {filepath}")
+        return process_hla_file_extended_features(filepath)
         return process_hla_file(filepath)
     elif "prime" in name:
         print(f"  [PRIME]     {filepath}")
@@ -148,7 +160,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "input_files",
         nargs="+",
-        help="One or more input files to process.",
+        help="One or more input files to process. Use '+' as a separator between feature groups.",
     )
     parser.add_argument(
         "--output",
@@ -158,24 +170,64 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def split_into_groups(file_list: list[str], separator: str = "+") -> list[list[str]]:
+    """
+    Split a flat list of file paths into groups using a separator token.
+
+    Example:
+        ["a.csv", "b.csv", "+", "c.csv", "+", "d.csv", "e.csv"]
+        → [["a.csv", "b.csv"], ["c.csv"], ["d.csv", "e.csv"]]
+    """
+    groups, current = [], []
+    for item in file_list:
+        if item == separator:
+            if current:
+                groups.append(current)
+                current = []
+        else:
+            current.append(item)
+    if current:
+        groups.append(current)
+    return groups
+
+
+def load_and_concat_group(filepaths: list[str]) -> pd.DataFrame:
+    """
+    Load all files in a feature group, concatenate them, and deduplicate.
+
+    Args:
+        filepaths: Files that all represent the same feature.
+
+    Returns:
+        A single deduplicated DataFrame for that feature.
+    """
+    dataframes = [load_and_process_file(fp) for fp in filepaths]
+    concatenated = pd.concat(dataframes, ignore_index=True)
+    before = len(concatenated)
+    concatenated = concatenated.drop_duplicates(subset=["peptide"])
+    after = len(concatenated)
+    if before != after:
+        print(f"    Dropped {before - after} duplicate peptides after concat.")
+    return concatenated
+
+
 def main() -> None:
     args = parse_args()
+    groups = split_into_groups(args.input_files)
 
-    print(f"Processing {len(args.input_files)} file(s)…")
-    dataframes = [load_and_process_file(fp) for fp in args.input_files]
+    print(f"Processing {len(groups)} feature group(s)…")
+    feature_dataframes = []
+    for i, group in enumerate(groups):
+        print(f"  Group {i + 1} ({len(group)} file(s)):")
+        feature_dataframes.append(load_and_concat_group(group))
 
-    for i, df in enumerate(dataframes):
-        dupes = df['peptide'].duplicated().sum()
-        print(f"DataFrame {i}: {dupes} duplicate peptide rows")
+    print("Merging feature groups…")
+    combined = merge_on_peptide(feature_dataframes)
 
-    print("Merging dataframes…")
-    combined = merge_on_peptide(dataframes)
-
-    # Removes any leftover header rows in files
-    combined = combined[~combined['peptide'].str.contains('pep')]
-
+    combined = combined[~combined["peptide"].str.contains("pep")]
     combined.to_csv(args.output, index=False)
     print(f"Done. Output written to '{args.output}' ({len(combined)} rows).")
+
 
 
 if __name__ == "__main__":
