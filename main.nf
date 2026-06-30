@@ -5,6 +5,7 @@ include {
     GET_INPUT_PEPTIDES
     RUN_PATHOGENICITY
     RUN_SELF_SIMILARITY
+    RUN_REPITOPE
 } from './modules/processes/wrapper_processes'
 
 include {
@@ -34,14 +35,6 @@ workflow {
     
     main: 
 
-        def generatedPeps_ch = params.use_generatePeptides
-            ? GENERATE_PEPTIDES.out.txt
-            : Channel.empty()
-
-        def customPeps_ch = params.use_customPeptides
-            ? Channel.fromPath(params.customPeptides)
-            : Channel.empty()
-
         if (params.use_generatePeptides) {
             def pepsickle_input_ch = channel.fromPath(params.inputFasta)
                                             .splitFasta(by: params.batchSize, file: true)
@@ -62,6 +55,14 @@ workflow {
                             params.refProteome, params.refGff, params.genesToRemoveFromRef, 
                             params.pepsickleCleavageThreshold, params.peptide_lengths, params.filter)
         }
+
+        def generatedPeps_ch = params.use_generatePeptides
+            ? GENERATE_PEPTIDES.out.txt
+            : Channel.empty()
+
+        def customPeps_ch = params.use_customPeptides
+            ? Channel.fromPath(params.customPeptides)
+            : Channel.empty()
 
         if (params.use_customPeptides) {
             // Large batch_size ensures only 1 peptide file is output
@@ -133,6 +134,12 @@ workflow {
             //                         }
             RUN_PRIME(GET_INPUT_PEPTIDES.out.splitText(by: 5000000, file: true), params.hla_alleles)
             outFiles = outFiles.mix(RUN_PRIME.out.collectFile(name: "immunogenicity_PRIME_results.txt", skip: 12, keepHeader: true))
+        }
+
+        // TODO - Create Workflow to include PREP_REPITOPE
+        if (params.use_repitope) {
+            RUN_REPITOPE(GET_INPUT_PEPTIDES.out, "${params.peptide_lengths}")
+            outFiles = outFiles.mix(RUN_REPITOPE.out)
         }
 
     publish:

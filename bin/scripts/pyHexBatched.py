@@ -56,7 +56,7 @@ def read_peptides(peptide_file):
 # Weights serve to give more importance to TCR interacting residues with regards to similarity
 # Potential to introduce iedb's masking technique for different HLA allele anchors
 
-def get_sequence_weights(length, magic_number=4):
+def get_sequence_weights(length, magic_number=1):
     """Return a positional weight array for a peptide of the given length."""
     mid_score = ceil(length / 2) * magic_number
     weights = list(range(1, mid_score, magic_number))

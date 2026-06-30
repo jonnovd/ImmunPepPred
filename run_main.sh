@@ -1,8 +1,8 @@
 #!/bin/bash
-#PBS -N non-binder
+#PBS -N hormad
 #PBS -lselect=1:ncpus=4:mem=32gb
 #PBS -lwalltime=24:00:00
-#PBS -o non-binder.log
+#PBS -o hormad.log
 #PBS -j oe
 
 cd $PBS_O_WORKDIR

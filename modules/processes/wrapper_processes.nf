@@ -75,7 +75,7 @@ process RUN_PATHOGENICITY {
         path "pathogenicity_pyHex_out.csv", emit: pyhex_out
     script:
     """
-        python ${params.pyHex} --peptides $peptides --reference $iedb_peptides --output pathogenicity_pyHex_out.csv --workers 4
+        python ${params.pyHex} --peptides $peptides --reference $iedb_peptides --magic-number ${params.pyHex_weight} --output pathogenicity_pyHex_out.csv --workers 4
     """
 }
 
@@ -89,6 +89,26 @@ process RUN_SELF_SIMILARITY {
         path "selfsimilarity_pyHex_out.csv", emit: pyhex_out
     script:
     """
-        python ${params.pyHex} --peptides $peptides --reference $benign_self_peptides --output selfsimilarity_pyHex_out.csv --workers 4
+        python ${params.pyHex} --peptides $peptides --reference $benign_self_peptides --magic-number ${params.pyHex_weight} --output selfsimilarity_pyHex_out.csv --workers 4
+    """
+}
+
+process RUN_REPITOPE {
+    container "${params.repitope_container}"
+    input:
+        path peptide_file
+        val pepLens
+
+    output:
+        path "repitope_out.csv"
+
+    script:
+    def pept_len_range = pepLens.tokenize('-').with { it.first() + ':' + it.last() }
+    """
+        python ${params.repitope} \
+            --input ${peptide_file} \
+            --home /data/repitope \
+            --output "repitope_out.csv" \
+            --pept_len_range ${pept_len_range}
     """
 }
