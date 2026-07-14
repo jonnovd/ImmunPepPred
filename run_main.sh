@@ -1,8 +1,8 @@
 #!/bin/bash
-#PBS -N hormad
+#PBS -N rerunPath
 #PBS -lselect=1:ncpus=4:mem=32gb
 #PBS -lwalltime=24:00:00
-#PBS -o hormad.log
+#PBS -o rerunPath.log
 #PBS -j oe
 
 cd $PBS_O_WORKDIR

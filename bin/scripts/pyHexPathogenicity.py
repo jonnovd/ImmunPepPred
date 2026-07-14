@@ -92,34 +92,28 @@ def score_length_group(peptides, reference_encoded, weights, chunk_size=256):
     self_blosum = BLOSUM62_MATRIX[peptides, peptides]
     self_scores = (self_blosum * weights[None, :]).sum(axis=1).astype(np.float32)
 
-    best_scores = np.empty(P, dtype=np.float32)
+    best_scores = np.full(P, np.nan, dtype=np.float32)  # nan = "no match < 1 found"
 
-    # Pre-weight the reference encodings so the inner loop is leaner:
-    # ref_weighted[r, pos] = BLOSUM62_MATRIX[ref[r, pos], :] * weights[pos]
-    # Shape: (R, L, 20) — references with weights baked in
     ref_blosum_weighted = BLOSUM62_MATRIX[reference_encoded] * weights[None, :, None]
-    # ^ (R, L, 20): for each ref position, the weighted BLOSUM row
 
     for start in range(0, P, chunk_size):
         chunk = peptides[start:start + chunk_size]  # (C, L)
+        chunk_self = self_scores[start:start + chunk_size]  # (C,)
 
-        # For each (ref, chunk_peptide) pair, sum over positions:
-        # score[r, c] = sum_pos( BLOSUM62[ref[r,pos], chunk[c,pos]] * weights[pos] )
-        #             = sum_pos( ref_blosum_weighted[r, pos, chunk[c, pos]] )
-        # Use advanced indexing: gather the right column per position per chunk peptide
-        # chunk_scores[r, c] = sum_pos ref_blosum_weighted[r, pos, chunk[c, pos]]
-        scores = ref_blosum_weighted[:, np.arange(L)[None, :], chunk].sum(axis=2)
-        # Shape: (R, C) — but the indexing above needs one fix:
-        # ref_blosum_weighted[:, pos, chunk[c, pos]] -> loop-free via:
-        scores = ref_blosum_weighted[:, np.arange(L), :][:, np.arange(L)[:, None], chunk.T]
-        # Simpler equivalent:
         scores = np.tensordot(
-            ref_blosum_weighted,        # (R, L, 20)
-            np.eye(20, dtype=np.int32)[chunk].transpose(1, 0, 2),  # (L, C, 20)
-            axes=([1, 2], [0, 2])       # contract over L and AA dims → (R, C)
-        )
+            ref_blosum_weighted,
+            np.eye(20, dtype=np.int32)[chunk].transpose(1, 0, 2),
+            axes=([1, 2], [0, 2])
+        )  # (R, C) raw (unnormalized) similarity scores
 
-        best_scores[start:start + chunk_size] = scores.max(axis=0)
+        # Mask out any ref score that would normalize to >= 1 for that peptide
+        # (i.e. self-matches or ties), leaving only strictly-better-than-self exclusions
+        below_identity = scores < chunk_self[None, :]
+        masked = np.where(below_identity, scores, -np.inf)
+
+        chunk_best = masked.max(axis=0)  # (C,), -inf where nothing qualified
+        has_match = np.isfinite(chunk_best)
+        best_scores[start:start + chunk_size][has_match] = chunk_best[has_match]
 
     return best_scores / self_scores
 

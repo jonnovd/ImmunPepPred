@@ -31,6 +31,10 @@ include {
     MTEC_WORKFLOW
 } from './modules/workflows/mTEC_workflow'
 
+include {
+    IMMUNOGENICITY_WORKFLOW
+} from './modules/workflows/immunogenicity_workflow'
+
 workflow {
     
     main: 
@@ -121,19 +125,24 @@ workflow {
             outFiles = outFiles.mix(RUN_SELF_SIMILARITY.out.collectFile(name: "selfsimilarity_pyHex_out.csv"))
         }
 
-        if (params.use_deepimmuno) {
-            RUN_DEEPIMMUNO(params.deepimmuno_in, file("${params.deepimmuno_dir}/data"), file("${params.deepimmuno_dir}/models"))
-            outFiles = outFiles.mix(RUN_DEEPIMMUNO.out)
-        }
+        // if (params.use_deepimmuno) {
+        //     RUN_DEEPIMMUNO(params.deepimmuno_in, file("${params.deepimmuno_dir}/data"), file("${params.deepimmuno_dir}/models"))
+        //     outFiles = outFiles.mix(RUN_DEEPIMMUNO.out)
+        // }
 
-        if (params.use_prime) {
-            // prime_allele_ch = Channel.fromPath(params.hla_alleles)
-            //                         .splitText()
-            //                         .collect { allele ->
-            //                             "$allele, "
-            //                         }
-            RUN_PRIME(GET_INPUT_PEPTIDES.out.splitText(by: 5000000, file: true), params.hla_alleles)
-            outFiles = outFiles.mix(RUN_PRIME.out.collectFile(name: "immunogenicity_PRIME_results.txt", skip: 12, keepHeader: true))
+        // if (params.use_prime) {
+        //     // prime_allele_ch = Channel.fromPath(params.hla_alleles)
+        //     //                         .splitText()
+        //     //                         .collect { allele ->
+        //     //                             "$allele, "
+        //     //                         }
+        //     RUN_PRIME(GET_INPUT_PEPTIDES.out.splitText(by: 5000000, file: true), params.hla_alleles)
+        //     outFiles = outFiles.mix(RUN_PRIME.out.collectFile(name: "immunogenicity_PRIME_results.txt", skip: 12, keepHeader: true))
+        // }
+
+        if (params.use_deepimmuno || params.use_prime) {
+            IMMUNOGENICITY_WORKFLOW(GET_INPUT_PEPTIDES.out.splitText(by: 5000000, file: true))
+            outFiles = outFiles.mix(IMMUNOGENICITY_WORKFLOW.out)
         }
 
         // TODO - Create Workflow to include PREP_REPITOPE

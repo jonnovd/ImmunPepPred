@@ -75,7 +75,7 @@ process RUN_PATHOGENICITY {
         path "pathogenicity_pyHex_out.csv", emit: pyhex_out
     script:
     """
-        python ${params.pyHex} --peptides $peptides --reference $iedb_peptides --magic-number ${params.pyHex_weight} --output pathogenicity_pyHex_out.csv --workers 4
+        python ${params.pyHexPathogenicity} --peptides $peptides --reference $iedb_peptides --magic-number ${params.pyHex_weight} --output pathogenicity_pyHex_out.csv --workers 4
     """
 }
 
@@ -89,7 +89,7 @@ process RUN_SELF_SIMILARITY {
         path "selfsimilarity_pyHex_out.csv", emit: pyhex_out
     script:
     """
-        python ${params.pyHex} --peptides $peptides --reference $benign_self_peptides --magic-number ${params.pyHex_weight} --output selfsimilarity_pyHex_out.csv --workers 4
+        python ${params.pyHexSelfSimilarity} --peptides $peptides --reference $benign_self_peptides --magic-number ${params.pyHex_weight} --output selfsimilarity_pyHex_out.csv --workers 4
     """
 }
 

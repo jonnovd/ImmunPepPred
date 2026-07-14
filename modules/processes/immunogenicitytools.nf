@@ -1,4 +1,20 @@
 
+process PREP_DEEPIMMUNO_INPUT {
+    conda "${params.env_deepimmuno}"
+
+    input:
+        path peptide_file
+        path allele_file
+
+    output:
+        path "deepimmuno_in.csv"
+
+    script:
+    """
+        python ${params.prep_deepimmuno} -p $peptide_file -a $allele_file --output deepimmuno_in.csv
+    """
+}
+
 process RUN_DEEPIMMUNO {
     conda "${params.env_deepimmuno}"
 
@@ -11,7 +27,22 @@ process RUN_DEEPIMMUNO {
     script:
     """
         python ${params.deepimmuno_dir}/deepimmuno-cnn.py --mode "multiple" --intdir $input_peptide_allele_csv --outdir .
-        mv "deepimmuno-cnn-result.txt" immuno_deepimmuno-out.txt
+        mv "deepimmuno-cnn-result.txt" immunogenicity_deepimmuno-out.txt
+    """
+}
+
+process PROCESS_DEEPIMMUNO_OUTPUT {
+    conda "${params.env_deepimmuno}"
+
+    input:
+        path deepimmuno_csv
+
+    output:
+        path "immunogenicity_deepimmuno.csv"
+
+    script:
+    """
+        python ${params.process_deepimmuno_out} -f $deepimmuno_csv --output immunogenicity_deepimmuno.csv
     """
 }
 
