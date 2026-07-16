@@ -51,8 +51,13 @@ def process_hla_file_extended_features(filepath: str) -> pd.DataFrame:
     """
     """
     df = pd.read_csv(filepath)
-    df = df[['peptide', 'best_rank', 'avg_rank', 'best_netmhc_r', 'best_mixmhc_r', 'best_mhcflurry_r', 
-             'best_mhcnuggets_r','weak_binders_count', 'strong_binders_count', 'Num_Tools_Super_Strong_Binder', 
+    # df = df[['peptide', 'best_rank', 'avg_rank', 'best_netmhc_r', 'best_mixmhc_r', 'best_mhcflurry_r', 
+    #          'best_mhcnuggets_r','weak_binders_count', 'strong_binders_count', 'Num_Tools_Super_Strong_Binder', 
+    #          'Num_Tools_Strong_Binder', 'Num_Tools_Weak_Binder', 'Num_Tools_Super_Weak_Binder',
+    #          'Num_Tools_0_01', 'Num_Tools_0_02', 'Num_Tools_0_03', 'Num_Tools_0_04', 'Num_Tools_0_05',
+    #          'Num_Tools_0_10', 'Num_Tools_0_50', 'Num_Tools_1', 'Num_Tools_2']]
+    df = df[['peptide', 'best_rank', 'avg_rank', 'best_netmhc_r', 'best_mixmhc_r', 'best_mhcflurry_r'
+             ,'weak_binders_count', 'strong_binders_count', 'Num_Tools_Super_Strong_Binder', 
              'Num_Tools_Strong_Binder', 'Num_Tools_Weak_Binder', 'Num_Tools_Super_Weak_Binder',
              'Num_Tools_0_01', 'Num_Tools_0_02', 'Num_Tools_0_03', 'Num_Tools_0_04', 'Num_Tools_0_05',
              'Num_Tools_0_10', 'Num_Tools_0_50', 'Num_Tools_1', 'Num_Tools_2']]
