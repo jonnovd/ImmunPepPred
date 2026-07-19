@@ -9,7 +9,7 @@
     "peptide_lengths" : "8-9-10-11",
     "pepsickleCleavageThreshold" : 0.2,
     "batchSize" : 5,
-    "hla_alleles" : "${projectDir}/input/mage_alleles.txt",
+    "hla_alleles" : "${projectDir}/input/common_alleles.txt",
     "mtec_files" : "${projectDir}/dbs/mtecs/*.txt",
     "mtec_expression_threshold" : 5,
     "use_mhcflurry" : true,
@@ -28,7 +28,7 @@
     "use_mtec"             : false,
     "use_pathogenicity"    : false,
     "use_selfsimilarity"   : false,
-    "use_prime"            : true,
-    "use_deepimmuno"       : false,
+    "use_prime"            : false,
+    "use_deepimmuno"       : true,
     "use_repitope"         : false
 }

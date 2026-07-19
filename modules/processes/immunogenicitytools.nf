@@ -23,7 +23,7 @@ process RUN_DEEPIMMUNO {
         path deepimmuno_data    // Just to stage the data file in the work dir
         path deepimmuno_models  // same
     output:
-        path "immuno_deepimmuno-out.txt", emit: deepimmuno_out
+        path "immunogenicity_deepimmuno-out.txt", emit: deepimmuno_out
     script:
     """
         python ${params.deepimmuno_dir}/deepimmuno-cnn.py --mode "multiple" --intdir $input_peptide_allele_csv --outdir .
