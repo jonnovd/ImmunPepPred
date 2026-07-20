@@ -86,6 +86,11 @@ def process_default_file(filepath: str) -> pd.DataFrame:
         df.rename(columns={'similarity_score':'selfsimilarity'}, inplace=True)
     elif 'tap' in Path(filepath).name.lower():
         df.rename(columns={'pred_score':'tap_score'}, inplace=True)
+    elif 'deepimmuno' in Path(filepath).name.lower():
+        df.rename(columns={'best_immunogenicity':'di_best_score', 'avg_immunogenicity':'di_avg_score',
+                           'best_hla_a':'di_best_a_score', 'avg_hla_a':'di_avg_a_score',
+                           'best_hla_b':'di_best_b_score', 'avg_hla_b':'di_avg_b_score',
+                           'best_hla_c':'di_best_c_score', 'avg_hla_c':'di_avg_c_score'}, inplace=True)
 
     _validate_peptide_column(df, filepath)
     df = df.drop_duplicates(subset=['peptide'])
