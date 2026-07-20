@@ -39,6 +39,10 @@ def parse_args():
         help="One or more DeepImmuno output CSV files."
     )
     parser.add_argument(
+        "--lengroup", required=True,
+        help="Path to length group of this file"
+    )
+    parser.add_argument(
         "--output", required=True,
         help="Path to output summary CSV file."
     )
@@ -68,6 +72,10 @@ def parse_hla_gene(hla):
 def main():
     args = parse_args()
 
+    if args.lengroup is None:
+        sys.exit("Error: No length group provided")
+    process11mers = int(args.lengroup) == 11
+
     # peptide -> list of (hla_gene, score)
     peptide_scores = defaultdict(list)
 
@@ -81,19 +89,49 @@ def main():
             hla_col = "HLA"
             score_col = "immunogenicity"
 
-            for row in reader:
-                pep = row[pep_col].strip()
-                hla = row[hla_col].strip()
-                score_raw = row[score_col].strip()
-                if not pep or not hla or not score_raw:
-                    continue
-                try:
-                    score = float(score_raw)
-                except ValueError:
-                    continue
+            if process11mers:
+                prevPep, prev11mer, prevScore = None, None, None
+                for row in reader:
+                    pep = row[pep_col].strip()
+                    hla = row[hla_col].strip()
+                    score_raw = row[score_col].strip()
+                    if not pep or not hla or not score_raw:
+                        continue
+                    try:
+                        score = float(score_raw)
+                    except ValueError:
+                        continue
 
-                gene = parse_hla_gene(hla)
-                peptide_scores[pep].append((gene, score))
+                    gene = parse_hla_gene(hla)
+
+                    mer11 = None
+                    if prevPep:
+                        mer11 = prevPep + pep[-1]
+                        if mer11 != prev11mer:
+                            bestScore = prevScore
+                            if score > bestScore:
+                                bestScore = score
+                            peptide_scores[mer11].append((gene, bestScore))
+                        prevPep = pep
+                        prevScore = score
+                        prev11mer = mer11
+                    else:
+                        prevPep = pep
+                        prevScore = score
+            else:
+                for row in reader:
+                    pep = row[pep_col].strip()
+                    hla = row[hla_col].strip()
+                    score_raw = row[score_col].strip()
+                    if not pep or not hla or not score_raw:
+                        continue
+                    try:
+                        score = float(score_raw)
+                    except ValueError:
+                        continue
+
+                    gene = parse_hla_gene(hla)
+                    peptide_scores[pep].append((gene, score))
 
     if not peptide_scores:
         sys.exit("Error: no valid rows found across input files.")

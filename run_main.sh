@@ -1,8 +1,8 @@
 #!/bin/bash
-#PBS -N deepimmunoRandself
+#PBS -N deepimmunoTraintest
 #PBS -lselect=1:ncpus=4:mem=32gb
 #PBS -lwalltime=24:00:00
-#PBS -o deepimmunoRandself.log
+#PBS -o deepimmunoTraintest.log
 #PBS -j oe
 
 cd $PBS_O_WORKDIR
