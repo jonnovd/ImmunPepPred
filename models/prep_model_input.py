@@ -51,11 +51,6 @@ def process_hla_file_extended_features(filepath: str) -> pd.DataFrame:
     """
     """
     df = pd.read_csv(filepath)
-    # df = df[['peptide', 'best_rank', 'avg_rank', 'best_netmhc_r', 'best_mixmhc_r', 'best_mhcflurry_r', 
-    #          'best_mhcnuggets_r','weak_binders_count', 'strong_binders_count', 'Num_Tools_Super_Strong_Binder', 
-    #          'Num_Tools_Strong_Binder', 'Num_Tools_Weak_Binder', 'Num_Tools_Super_Weak_Binder',
-    #          'Num_Tools_0_01', 'Num_Tools_0_02', 'Num_Tools_0_03', 'Num_Tools_0_04', 'Num_Tools_0_05',
-    #          'Num_Tools_0_10', 'Num_Tools_0_50', 'Num_Tools_1', 'Num_Tools_2']]
     df = df[['peptide', 'best_rank', 'avg_rank', 'best_netmhc_r', 'best_mixmhc_r', 'best_mhcflurry_r'
              ,'weak_binders_count', 'strong_binders_count', 'Num_Tools_Super_Strong_Binder', 
              'Num_Tools_Strong_Binder', 'Num_Tools_Weak_Binder', 'Num_Tools_Super_Weak_Binder',
@@ -67,6 +62,29 @@ def process_hla_file_extended_features(filepath: str) -> pd.DataFrame:
     df = df.drop_duplicates(subset=['peptide'])
     return df
 
+def process_hla_file_nn_features(filepath: str) -> pd.DataFrame:
+    """
+    """
+    df = pd.read_csv(filepath)
+    df.rename(columns={'best_rank':'hla_best_rank'}, inplace=True)
+    df = df.drop(
+        columns=[
+            'Strong_Binders_Count_1',
+            'Strong_Binders_Count_2',
+            'Weak_Binders_Count_1',
+            'Weak_Binders_Count_2',
+            'netmhc_a',
+            'mixmhc_a',
+            'mhcflurry_a',
+            'all_strong_binders',
+            'all_weak_binders',
+            'immunogenic',
+        ],
+        errors='ignore')
+
+    _validate_peptide_column(df, filepath)
+    df = df.drop_duplicates(subset=['peptide'])
+    return df
 
 def process_default_file(filepath: str) -> pd.DataFrame:
     """
@@ -115,6 +133,7 @@ def load_and_process_file(filepath: str) -> pd.DataFrame:
 
     if "hla" in name:
         print(f"  [HLA]     {filepath}")
+        return process_hla_file_nn_features(filepath)
         return process_hla_file_extended_features(filepath)
         return process_hla_file(filepath)
     elif "prime" in name:
