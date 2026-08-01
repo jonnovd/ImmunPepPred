@@ -1,8 +1,8 @@
 #!/bin/bash
-#PBS -N deepimmunoTraintest
+#PBS -N magea4hormad
 #PBS -lselect=1:ncpus=4:mem=32gb
 #PBS -lwalltime=24:00:00
-#PBS -o deepimmunoTraintest.log
+#PBS -o magea4hormad.log
 #PBS -j oe
 
 cd $PBS_O_WORKDIR

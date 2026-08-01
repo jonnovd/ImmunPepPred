@@ -34,7 +34,7 @@ workflow HLA_WORKFLOW {
          I C R - MHC-FLOW - HLA BINDING PREDICTION  
          ===================================================
 
-         alleles file       : ${params.hla_alleles}
+         alleles file       : See GET_ALL_ALLELES() output
          min peptide length : ${params.min_peptide_length}
          max peptide length : ${params.max_peptide_length}
          batch size         : ${params.hla_batch_size}
@@ -47,19 +47,22 @@ workflow HLA_WORKFLOW {
 
     take:
         ch_rawPeptides
+        ch_hlaAlleleFile_1
+        ch_hlaAlleleFile_2
 
     main:
         //Create channel for the initial peptide list file
         // ch_rawPeptideFile = Channel
         //     .fromPath(params.peptides)
+        
 
         //Create channel for the HLA allele list file
-        ch_hlaAlleleFile = Channel
-            .fromPath(params.hla_alleles)
+        ch_hlaAlleleFile = ch_hlaAlleleFile_1//Channel
+            //.fromPath(hlaAlleleFile)
 
         //Create channel of HLA alleles in ch_hlaAlleleFile
-        ch_hlaAlleles = Channel
-            .fromPath(params.hla_alleles)
+        ch_hlaAlleles = ch_hlaAlleleFile_2//Channel
+            //.fromPath(hlaAlleleFile)
             .splitText()
             .map { it.trim() }
             .toList()

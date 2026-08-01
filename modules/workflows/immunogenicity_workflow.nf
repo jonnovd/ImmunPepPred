@@ -13,6 +13,7 @@ workflow IMMUNOGENICITY_WORKFLOW {
 
     take:
         peptide_file_ch
+        all_hla_alleles_ch
 
     main:
 
@@ -29,7 +30,7 @@ workflow IMMUNOGENICITY_WORKFLOW {
 
             PREP_DEEPIMMUNO_INPUT(
                 peptide_file_ch.splitText(by: 5000000, file: true),
-                params.hla_alleles,
+                all_hla_alleles_ch,
                 params.min_peptide_length,
                 params.max_peptide_length
             )
@@ -53,7 +54,7 @@ workflow IMMUNOGENICITY_WORKFLOW {
             //                         .collect { allele ->
             //                             "$allele, "
             //                         }
-            RUN_PRIME(peptide_file_ch.splitText(by: 5000000, file: true), params.hla_alleles)
+            RUN_PRIME(peptide_file_ch.splitText(by: 5000000, file: true), all_hla_alleles_ch)
             outFiles = outFiles.mix(RUN_PRIME.out.collectFile(name: "immunogenicity_PRIME_results.txt", skip: 12, keepHeader: true))
         }
     emit:

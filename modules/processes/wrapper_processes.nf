@@ -1,3 +1,25 @@
+process GET_ALL_ALLELES {
+    input:
+        path common_alleles
+        path input_alleles
+
+    output:
+        path "all_unique_alleles.txt"
+
+    script:
+    """
+    awk '
+    {
+        gsub(/^[[:space:]]+|[[:space:]]+\$/, "") 
+        if (NF) print
+    }
+    ' "$common_alleles" "$input_alleles" | sort -u > all_unique_alleles.txt
+
+    """
+    //awk '{gsub(/^[[:space:]]+|[[:space:]]+$/, ""); if (NF) print}' $common_alleles $input_alleles | sort -u > "all_unique_alleles.txt"
+    //#cat $common_alleles $input_alleles | sort -u > all_unique_alleles.txt
+}
+
 process RUN_PEPSICKLE {
     conda "${params.env_pepsickle}"
     
@@ -89,7 +111,7 @@ process RUN_SELF_SIMILARITY {
         path "selfsimilarity_pyHex_out.csv", emit: pyhex_out
     script:
     """
-        python ${params.pyHexSelfSimilarity} --peptides $peptides --reference $benign_self_peptides --magic-number ${params.pyHex_weight} --output selfsimilarity_pyHex_out.csv --workers 4
+        python ${params.pyHexPathogenicity} --peptides $peptides --reference $benign_self_peptides --magic-number ${params.pyHex_weight} --output selfsimilarity_pyHex_out.csv --workers 4
     """
 }
 
@@ -110,5 +132,33 @@ process RUN_REPITOPE {
             --home /data/repitope \
             --output "repitope_out.csv" \
             --pept_len_range ${pept_len_range}
+    """
+}
+
+process BUILD_FEATURE_TABLE {
+    conda "${params.env_featureTable}"
+    input:
+        path hla_file
+        path mtec_file 
+        path pathogenicity_file
+        path deepimmuno_file
+        path prime_file
+        path common_alleles
+        path all_alleles
+
+    output:
+        path "combined_featureTable.csv"
+
+    script:
+    """
+        python ${params.buildFeatureTable} \
+            --hla $hla_file \
+            --deepimmuno $deepimmuno_file \
+            --prime $prime_file \
+            --pathogenicity $pathogenicity_file \
+            --mtec $mtec_file \
+            --common_alleles $common_alleles \
+            --all_alleles $all_alleles \
+            --output "combined_featureTable.csv"
     """
 }

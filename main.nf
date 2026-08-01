@@ -1,4 +1,5 @@
 include {
+    GET_ALL_ALLELES
     RUN_PEPSICKLE as RUN_PEPSICKLE_INPUT
     RUN_PEPSICKLE as RUN_PEPSICKLE_REF
     GENERATE_PEPTIDES
@@ -6,6 +7,7 @@ include {
     RUN_PATHOGENICITY
     RUN_SELF_SIMILARITY
     RUN_REPITOPE
+    BUILD_FEATURE_TABLE
 } from './modules/processes/wrapper_processes'
 
 include {
@@ -39,6 +41,8 @@ workflow {
     
     main: 
 
+        GET_ALL_ALLELES(params.common_hla_alleles, params.input_hla_alleles)
+        
         if (params.use_generatePeptides) {
             def pepsickle_input_ch = channel.fromPath(params.inputFasta)
                                             .splitFasta(by: params.batchSize, file: true)
@@ -89,7 +93,7 @@ workflow {
         if (params.use_hlapred) {
             hlaPred_output_ch = [ out: Channel.empty() ] as Object
             def hlaPredPeptideFile_ch   = GET_INPUT_PEPTIDES.out
-            hlaPred_output_ch           = HLA_WORKFLOW(hlaPredPeptideFile_ch)
+            hlaPred_output_ch           = HLA_WORKFLOW(hlaPredPeptideFile_ch, GET_ALL_ALLELES.out, GET_ALL_ALLELES.out)
 
             outFiles = outFiles.mix(HLA_WORKFLOW.out)
         }
@@ -125,31 +129,42 @@ workflow {
             outFiles = outFiles.mix(RUN_SELF_SIMILARITY.out.collectFile(name: "selfsimilarity_pyHex_out.csv"))
         }
 
-        // if (params.use_deepimmuno) {
-        //     RUN_DEEPIMMUNO(params.deepimmuno_in, file("${params.deepimmuno_dir}/data"), file("${params.deepimmuno_dir}/models"))
-        //     outFiles = outFiles.mix(RUN_DEEPIMMUNO.out)
-        // }
-
-        // if (params.use_prime) {
-        //     // prime_allele_ch = Channel.fromPath(params.hla_alleles)
-        //     //                         .splitText()
-        //     //                         .collect { allele ->
-        //     //                             "$allele, "
-        //     //                         }
-        //     RUN_PRIME(GET_INPUT_PEPTIDES.out.splitText(by: 5000000, file: true), params.hla_alleles)
-        //     outFiles = outFiles.mix(RUN_PRIME.out.collectFile(name: "immunogenicity_PRIME_results.txt", skip: 12, keepHeader: true))
-        // }
-
         if (params.use_deepimmuno || params.use_prime) {
-            IMMUNOGENICITY_WORKFLOW(GET_INPUT_PEPTIDES.out.splitText(by: 5000000, file: true))
+            IMMUNOGENICITY_WORKFLOW(GET_INPUT_PEPTIDES.out.splitText(by: 5000000, file: true), GET_ALL_ALLELES.out)
             outFiles = outFiles.mix(IMMUNOGENICITY_WORKFLOW.out)
         }
 
         // TODO - Create Workflow to include PREP_REPITOPE
-        if (params.use_repitope) {
-            RUN_REPITOPE(GET_INPUT_PEPTIDES.out, "${params.peptide_lengths}")
-            outFiles = outFiles.mix(RUN_REPITOPE.out)
+        // if (params.use_repitope) {
+        //     RUN_REPITOPE(GET_INPUT_PEPTIDES.out, "${params.peptide_lengths}")
+        //     outFiles = outFiles.mix(RUN_REPITOPE.out)
+        // }
+
+        if (params.create_feature_table && params.use_deepimmuno && params.use_prime && params.use_pathogenicity && params.use_mtec && params.use_hlapred) {
+            immuno_split = IMMUNOGENICITY_WORKFLOW.out.branch {
+                prime:      it.name.contains('PRIME')
+                deepimmuno: it.name.contains('deepimmuno')
+            }
+            
+            BUILD_FEATURE_TABLE(HLA_WORKFLOW.out, 
+                                MTEC_WORKFLOW.out.mtec_expression_classification, 
+                                RUN_PATHOGENICITY.out.collectFile(name: 'pathogenicity_pyHex_out.csv'), 
+                                immuno_split.deepimmuno,
+                                immuno_split.prime,
+                                params.common_hla_alleles,
+                                GET_ALL_ALLELES.out)
+            
+            outFiles = outFiles.mix(BUILD_FEATURE_TABLE.out)
         }
+
+        // TODO Prediction model
+        // if (params.use_ml_model) {
+        //     PRIORITISE_IMMUNONGENIC_PEPTIDES(GET_INPUT_PEPTIDES.out.collectFile(name: 'in-peptides_all.txt'),
+        //                                     BUILD_FEATURE_TABLE.out,
+        //                                     params.prioritisation_model)
+
+        //     outFiles = outFiles.mix(PRIORITISE_IMMUNONGENIC_PEPTIDES.out)
+        // }
 
     publish:
         outFiles = outFiles
