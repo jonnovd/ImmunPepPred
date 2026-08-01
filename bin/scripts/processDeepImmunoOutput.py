@@ -68,6 +68,20 @@ def parse_hla_gene(hla):
         return None
     return match.group(1).upper()
 
+def get_paired_rows(reader, filepath):
+    """
+    Yields (row_a, row_b) pairs of consecutive rows from a CSV reader,
+    without ever materializing the whole file in memory.
+    Warns and drops a trailing unpaired row if the file has an odd row count.
+    """
+    for row_a in reader:
+        try:
+            row_b = next(reader)
+        except StopIteration:
+            print(f"Warning: odd number of rows in {filepath}; dropping last unpaired row",
+                  file=sys.stderr)
+            return
+        yield row_a, row_b
 
 def main():
     args = parse_args()
@@ -90,34 +104,15 @@ def main():
             score_col = "immunogenicity"
 
             if process11mers:
-                prevPep, prev11mer, prevScore = None, None, None
-                for row in reader:
-                    pep = row[pep_col].strip()
-                    hla = row[hla_col].strip()
-                    score_raw = row[score_col].strip()
-                    if not pep or not hla or not score_raw:
-                        continue
-                    try:
-                        score = float(score_raw)
-                    except ValueError:
-                        continue
-
-                    gene = parse_hla_gene(hla)
-
-                    mer11 = None
-                    if prevPep:
-                        mer11 = prevPep + pep[-1]
-                        if mer11 != prev11mer:
-                            bestScore = prevScore
-                            if score > bestScore:
-                                bestScore = score
-                            peptide_scores[mer11].append((gene, bestScore))
-                        prevPep = pep
-                        prevScore = score
-                        prev11mer = mer11
-                    else:
-                        prevPep = pep
-                        prevScore = score
+                for row_a, row_b in get_paired_rows(reader, filepath):
+                    pep_a, pep_b = row_a[pep_col].strip(), row_b[pep_col].strip()
+                    hla_a, hla_b = row_a[hla_col].strip(), row_b[hla_col].strip()
+                    score_a, score_b = float(row_a[score_col].strip()), float(row_b[score_col].strip())
+                    if hla_a != hla_b:
+                        print(f"Warning: mismatched alleles in pair ({hla_a} vs {hla_b}); skipping", file=sys.stderr)
+                        continue  # fragments don't belong to the same peptide/allele pair — skip
+                    mer11 = pep_a + pep_b[-1]
+                    peptide_scores[mer11].append((parse_hla_gene(hla_a), max(score_a, score_b)))
             else:
                 for row in reader:
                     pep = row[pep_col].strip()
@@ -143,8 +138,11 @@ def main():
             "best_immunogenicity",
             "avg_immunogenicity",
             "best_hla_a",
+            "avg_hla_a",
             "best_hla_b",
+            "avg_hla_b",
             "best_hla_c",
+            "avg_hla_c",
         ])
 
         for pep, entries in peptide_scores.items():
@@ -158,10 +156,13 @@ def main():
                     gene_scores[gene].append(score)
 
             best_a = max(gene_scores["A"]) if gene_scores["A"] else ""
+            avg_a = sum(gene_scores["A"]) / len(gene_scores["A"]) if gene_scores["A"] else ""
             best_b = max(gene_scores["B"]) if gene_scores["B"] else ""
+            avg_b = sum(gene_scores["B"]) / len(gene_scores["B"]) if gene_scores["B"] else ""
             best_c = max(gene_scores["C"]) if gene_scores["C"] else ""
+            avg_c = sum(gene_scores["C"]) / len(gene_scores["C"]) if gene_scores["C"] else ""
 
-            writer.writerow([pep, best_overall, avg_overall, best_a, best_b, best_c])
+            writer.writerow([pep, best_overall, avg_overall, best_a, avg_a, best_b, avg_b, best_c, avg_c])
 
     print(f"Wrote summary for {len(peptide_scores)} peptides to {args.output}")
 
