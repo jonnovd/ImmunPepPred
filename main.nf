@@ -7,6 +7,7 @@ include {
     RUN_PATHOGENICITY
     RUN_SELF_SIMILARITY
     RUN_REPITOPE
+    PROCESS_HLA_WORKFLOW_OUTPUT
     BUILD_FEATURE_TABLE
 } from './modules/processes/wrapper_processes'
 
@@ -93,9 +94,12 @@ workflow {
         if (params.use_hlapred) {
             hlaPred_output_ch = [ out: Channel.empty() ] as Object
             def hlaPredPeptideFile_ch   = GET_INPUT_PEPTIDES.out
-            hlaPred_output_ch           = HLA_WORKFLOW(hlaPredPeptideFile_ch, GET_ALL_ALLELES.out, GET_ALL_ALLELES.out)
+            hlaPred_output_ch           = HLA_WORKFLOW(hlaPredPeptideFile_ch, GET_ALL_ALLELES.out, GET_ALL_ALLELES.out)out.collect()
 
-            outFiles = outFiles.mix(HLA_WORKFLOW.out)
+            // To deal with calculating summary columns and concatenating peptides over split allele channels
+            PROCESS_HLA_WORKFLOW_OUTPUT(hlaPred_output_ch, GET_ALL_ALLELES.out, params.common_hla_alleles)
+
+            outFiles = outFiles.mix(PROCESS_HLA_WORKFLOW_OUTPUT.out)
         }
 
         if (params.use_tap) {
@@ -146,13 +150,13 @@ workflow {
                 deepimmuno: it.name.contains('deepimmuno')
             }
             
-            BUILD_FEATURE_TABLE(HLA_WORKFLOW.out, 
+            BUILD_FEATURE_TABLE(PROCESS_HLA_WORKFLOW_OUTPUT.out, 
                                 MTEC_WORKFLOW.out.mtec_expression_classification, 
                                 RUN_PATHOGENICITY.out.collectFile(name: 'pathogenicity_pyHex_out.csv'), 
                                 immuno_split.deepimmuno,
-                                immuno_split.prime,
-                                params.common_hla_alleles,
-                                GET_ALL_ALLELES.out)
+                                immuno_split.prime)//,
+                                // params.common_hla_alleles,
+                                // GET_ALL_ALLELES.out)
             
             outFiles = outFiles.mix(BUILD_FEATURE_TABLE.out)
         }

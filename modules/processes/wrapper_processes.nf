@@ -135,6 +135,23 @@ process RUN_REPITOPE {
     """
 }
 
+process PROCESS_HLA_WORKFLOW_OUTPUT {
+    conda "${params.env_featureTable}"
+    input:
+        path hla_pred_output
+        path all_alleles
+        path common_alleles
+    output:
+        path 'hla_prediction_results.csv'
+    script:
+        """
+        python ${params.consolidateHlaPredResults} $hla_pred_output \
+        --all-alleles $all_alleles \
+        --common-alleles $common_alleles \
+        --output 'hla_prediction_results.csv'
+        """
+}
+
 process BUILD_FEATURE_TABLE {
     conda "${params.env_featureTable}"
     input:
@@ -143,8 +160,6 @@ process BUILD_FEATURE_TABLE {
         path pathogenicity_file
         path deepimmuno_file
         path prime_file
-        path common_alleles
-        path all_alleles
 
     output:
         path "combined_featureTable.csv"
@@ -157,8 +172,35 @@ process BUILD_FEATURE_TABLE {
             --prime $prime_file \
             --pathogenicity $pathogenicity_file \
             --mtec $mtec_file \
-            --common_alleles $common_alleles \
-            --all_alleles $all_alleles \
             --output "combined_featureTable.csv"
     """
 }
+
+// OLD
+// process BUILD_FEATURE_TABLE {
+//     conda "${params.env_featureTable}"
+//     input:
+//         path hla_file
+//         path mtec_file 
+//         path pathogenicity_file
+//         path deepimmuno_file
+//         path prime_file
+//         path common_alleles
+//         path all_alleles
+
+//     output:
+//         path "combined_featureTable.csv"
+
+//     script:
+//     """
+//         python ${params.buildFeatureTable} \
+//             --hla $hla_file \
+//             --deepimmuno $deepimmuno_file \
+//             --prime $prime_file \
+//             --pathogenicity $pathogenicity_file \
+//             --mtec $mtec_file \
+//             --common_alleles $common_alleles \
+//             --all_alleles $all_alleles \
+//             --output "combined_featureTable.csv"
+//     """
+// }

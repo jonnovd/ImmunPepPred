@@ -1,8 +1,8 @@
 #!/bin/bash
-#PBS -N magea4hormad
+#PBS -N traintest9kcleaved2
 #PBS -lselect=1:ncpus=4:mem=32gb
 #PBS -lwalltime=24:00:00
-#PBS -o magea4hormad.log
+#PBS -o traintest9kcleaved2.log
 #PBS -j oe
 
 cd $PBS_O_WORKDIR
