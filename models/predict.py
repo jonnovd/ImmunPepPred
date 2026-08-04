@@ -58,13 +58,13 @@ def load_metadata(metadata_path):
 def load_feature_table(feature_table_path, features):
     df = pd.read_csv(feature_table_path)
 
-    if 'best_rank' in df.columns:
-        df.rename(columns={'best_rank' : 'hla_best_rank'}, inplace=True)
+    #if 'best_rank' in df.columns:
+        #df.rename(columns={'best_rank' : 'hla_best_rank'}, inplace=True)
 
     if 'length' not in df.columns:
         df['length'] = df['peptide'].str.len()
 
-    required_extra_cols = ["peptide", "best_allele"]
+    required_extra_cols = ["peptide"]#, "best_allele"]
     missing_extra = [c for c in required_extra_cols if c not in df.columns]
     if missing_extra:
         sys.exit(
@@ -126,7 +126,7 @@ def main():
         "peptide": df["peptide"],
         "prediction": prediction,
         "probability_immunogenic": prob_immunogenic,
-        "best_binding_allele": df["best_allele"],
+        #"best_binding_allele": df["best_allele"],
     })
     # out_df = pd.DataFrame({
     #         "peptide": df["peptide"],
