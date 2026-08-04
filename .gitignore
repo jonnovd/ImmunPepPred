@@ -29,4 +29,5 @@ bin/PRIME-2.1/
 models/data/
 models/saved_models/*
 models/*.zip
-models/ml-pipeline/*
+models/ml-pipeline/results/*
+models/ml-pipeline/.venv*

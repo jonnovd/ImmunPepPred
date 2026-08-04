@@ -1,0 +1,99 @@
+# Example config for peptide_ml_workflow.py
+#
+# Run the whole thing in one go (train -> predict -> evaluate) with:
+#   python peptide_ml_workflow.py run --config example_config.yaml
+#
+# Or run stages separately (e.g. re-run only `predict`/`evaluate` later
+# using the models `train` already saved):
+#   python peptide_ml_workflow.py train    --config example_config.yaml
+#   python peptide_ml_workflow.py predict  --config example_config.yaml
+#   python peptide_ml_workflow.py evaluate --config example_config.yaml
+#
+# Restrict any stage to a subset of training sets / models with
+# --training-set NAME (repeatable) and/or --models logreg rf ...
+
+# All outputs are written under this directory:
+#   {output_root}/saved_models/{training_set_name}/{model}_pipeline.joblib (+ _metadata.json)
+#   {output_root}/saved_models/{training_set_name}/models_cv_metrics.png, models_mean_metrics.png
+#   {output_root}/predictions/{training_set_name}/{model}_predictions.csv
+#   {output_root}/evaluation/{training_set_name}/{model}_annotated.csv, _capture_summary.png, _classification_threshold.png
+output_root: results
+
+# ----------------------------------------------------------------------
+# Global settings, applied to every training set unless overridden below.
+# ----------------------------------------------------------------------
+cv:
+  n_splits: 5
+  n_repeats: 2
+  random_state: 42
+  refit_metric: precision   # which of the 5 scoring metrics GridSearchCV refits on
+
+# Default hyperparameter grids for each model
+# a training set can still re-enable/override it under its own `models:`.
+models:
+  logreg:
+    enabled: true
+    param_grid:
+      clf__C: [0.1, 1, 5, 10]
+  svm_linear:
+    enabled: true
+    param_grid:
+      clf__C: [0.1, 1, 5]
+  svm_rbf:
+    enabled: true
+    param_grid:
+      clf__C: [0.1, 1]
+      clf__gamma: [0.01, 0.1, 1]
+  rf:
+    enabled: true
+    param_grid:
+      clf__n_estimators: [200, 300]
+      clf__max_depth: [5, 10, 20]
+      clf__min_samples_leaf: [5, 10]
+  hgb:
+    enabled: true
+    param_grid:
+      clf__max_iter: [100, 200, 300]
+      clf__max_depth: [10, 20, 30]
+      clf__learning_rate: [0.05, 0.1]
+
+# ----------------------------------------------------------------------
+# One entry per training set. Add as many as you like; `train`/`predict`/
+# `evaluate`/`run` will loop over all of them (or just the ones named with
+# --training-set on the command line).
+# ----------------------------------------------------------------------
+training_sets:
+  - name: Imm_Non-Imm                      # used to name the output folder
+    feature_table: ../data/input/formatted-input/model_input_traintest_cleavedself9k_di_selfNoID.csv
+    immunogenic_peptides: ../data/input/cedar_imm_peps_traintest.txt
+    non_immunogenic_peptides: ../data/input/cedar_non_imm_peps_traintest.txt
+    features_file: features/imm_non-imm_features.txt   # plain text, one column name per line
+    model_order: [logreg, svm_linear, svm_rbf, rf, hgb]  # optional; default = all enabled models
+
+    # Optional per-training-set overrides of the global cv/models blocks, e.g.:
+    # cv:
+    #   n_splits: 10
+    # models:
+    #   svm_rbf:
+    #     enabled: false
+
+    # Validation set used by `predict` (scores every peptide) and `evaluate`
+    # (annotates + figures, only if immunogenic/non_immunogenic lists given).
+    validation:
+      feature_table: data/input/formatted-input/model_input_hormad1-magea4.csv
+      immunogenic_peptides: data/validation/ely2025_Imm_peps.txt      # optional
+      non_immunogenic_peptides: data/input/ely2025_non-imm_peps.txt  # optional
+      peptides_of_interest: data/validation/ely2025_all_tested_peps.txt                # optional subset filter
+      score_col: probability_immunogenic
+      threshold: 0.5
+      bin_width_capture: 0.02        # bin width for the per-bin immunogenic-count histogram
+      threshold_bin_width: 0.05      # bin width for the classification-threshold histogram
+      lower_is_better: false         # true for rank-style scores (lower = more immunogenic)
+
+  # - name: another_training_set
+  #   feature_table: ...
+  #   immunogenic_peptides: ...
+  #   non_immunogenic_peptides: ...
+  #   features_file: ...
+  #   validation:
+  #     feature_table: ...
