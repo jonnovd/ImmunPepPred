@@ -225,8 +225,8 @@ def load_feature_table(path: str, features: list[str], require_peptide_col: bool
     if "peptide" not in df.columns and require_peptide_col:
         sys.exit(f"ERROR: feature table '{path}' has no 'peptide' column.")
 
-    if "best_rank" in df.columns and "hla_best_rank" not in df.columns:
-        df.rename(columns={"best_rank": "hla_best_rank"}, inplace=True)
+    # if "best_rank" in df.columns and "hla_best_rank" not in df.columns:
+    #     df.rename(columns={"best_rank": "hla_best_rank"}, inplace=True)
 
     if "length" in features and "length" not in df.columns:
         df["length"] = df["peptide"].str.len()
@@ -659,9 +659,25 @@ def plot_evaluation_summary(bar_data, ranked_df, immunogenic_col, score_col, pre
 
 
 def plot_classification_threshold(df_labelled, score_col, label_col, threshold, bin_width,
-                                   lower_is_better, output_path):
+                                   lower_is_better, output_path, upsample=False, random_state=42):
     scores_immuno = df_labelled.loc[df_labelled[label_col] == 1, score_col]
     scores_non_immuno = df_labelled.loc[df_labelled[label_col] == 0, score_col]
+
+    n_immuno_orig = len(scores_immuno)
+    n_non_immuno_orig = len(scores_non_immuno)
+    upsampled_note = None
+
+    if upsample and n_immuno_orig > 0 and n_non_immuno_orig > 0 and n_immuno_orig != n_non_immuno_orig:
+        rng = np.random.default_rng(random_state)
+        target_n = max(n_immuno_orig, n_non_immuno_orig)
+        if n_immuno_orig < target_n:
+            idx = rng.choice(scores_immuno.index, size=target_n, replace=True)
+            scores_immuno = scores_immuno.loc[idx]
+            upsampled_note = f"immunogenic n={n_immuno_orig}\u2192{target_n} (bootstrap)"
+        else:
+            idx = rng.choice(scores_non_immuno.index, size=target_n, replace=True)
+            scores_non_immuno = scores_non_immuno.loc[idx]
+            upsampled_note = f"non-immunogenic n={n_non_immuno_orig}\u2192{target_n} (bootstrap)"
 
     if lower_is_better:
         tp = int((scores_immuno <= threshold).sum())
@@ -691,15 +707,27 @@ def plot_classification_threshold(df_labelled, score_col, label_col, threshold, 
     ax.axvline(threshold, color="black", linestyle="--", linewidth=1.5, label=f"Threshold = {threshold:.2f}")
     ax.set_xlabel(score_col, fontsize=12)
     ax.set_ylabel("Number of peptides", fontsize=12)
-    ax.set_title("Classification Threshold Visualisation", fontsize=14, fontweight="bold")
+    title = "Classification Threshold Visualisation"
+    if upsampled_note:
+        title += f"\n(class-balanced by upsampling: {upsampled_note})"
+    ax.set_title(title, fontsize=14, fontweight="bold")
     ax.set_xlim(0, 1)
     ax.legend(loc="upper left")
 
     metrics_text = (f"At threshold = {threshold:.2f}\nTP: {tp}   FN: {fn}\nFP: {fp}   TN: {tn}\n"
                      f"Recall: {recall:.2f}   Specificity: {specificity:.2f}\n"
                      f"Precision: {precision:.2f}   Accuracy: {accuracy:.2f}")
+    if upsampled_note:
+        metrics_text += f"\n(upsampled: {upsampled_note})"
     ax.text(0.98, 0.97, metrics_text, transform=ax.transAxes, fontsize=9, va="top", ha="right",
             bbox=dict(boxstyle="round", facecolor="white", edgecolor="gray", alpha=0.9))
+
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=200)
+    plt.close(fig)
+    return {"tp": tp, "fn": fn, "fp": fp, "tn": tn, "recall": recall,
+            "specificity": specificity, "precision": precision, "accuracy": accuracy,
+            "upsampled": bool(upsampled_note)}
 
     fig.tight_layout()
     fig.savefig(output_path, dpi=200)
@@ -714,7 +742,7 @@ def evaluate_predictions(predictions_csv: str, immunogenic_peptides_path: str,
                           score_col: str = "probability_immunogenic",
                           bin_width_capture: float = 0.02, threshold: float = 0.5,
                           threshold_bin_width: float = 0.05, lower_is_better: bool = False,
-                          prefix: str = "evaluation"):
+                          upsample: bool = False, prefix: str = "evaluation"):
     output_dir.mkdir(parents=True, exist_ok=True)
     df = pd.read_csv(predictions_csv)
     required = {"peptide", score_col}
@@ -779,10 +807,10 @@ def evaluate_predictions(predictions_csv: str, immunogenic_peptides_path: str,
     )
     print(f"Wrote capture-summary figure to {summary_fig_path}")
 
-    threshold_fig_path = output_dir / f"{prefix}_classification_threshold.png"
+    threshold_fig_path = output_dir / f"{prefix}_classification_threshold_t{threshold:.2f}.png"
     metrics = plot_classification_threshold(
         df_labelled, score_col, "validated_immunogenic", threshold, threshold_bin_width,
-        lower_is_better, threshold_fig_path,
+        lower_is_better, threshold_fig_path, upsample
     )
     print(f"Wrote classification-threshold figure to {threshold_fig_path}")
     print(metrics)
@@ -895,6 +923,7 @@ def cmd_evaluate(args):
                     threshold=validation.get("threshold", 0.5),
                     threshold_bin_width=validation.get("threshold_bin_width", 0.05),
                     lower_is_better=validation.get("lower_is_better", False),
+                    upsample=validation.get("upsample", False),
                     prefix=model_name,
                 )
     else:
@@ -905,6 +934,7 @@ def cmd_evaluate(args):
             peptides_of_interest_path=args.peptides, score_col=args.score_column,
             bin_width_capture=args.bin_width_capture, threshold=args.threshold,
             threshold_bin_width=args.threshold_bin_width, lower_is_better=args.lower_is_better,
+            upsample=validation.get("upsample", False),
             prefix=args.prefix,
         )
 
@@ -990,6 +1020,11 @@ def build_parser():
     p_eval.add_argument("--threshold-bin-width", type=float, default=0.05)
     p_eval.add_argument("--lower-is-better", action="store_true",
                          help="Set for rank-style scores where lower = more immunogenic.")
+    p_eval.add_argument("--upsample", action="store_true",
+                         help="Bootstrap-upsample the smaller ground-truth class (immunogenic vs "
+                              "non-immunogenic) to match the larger one before computing the "
+                              "classification-threshold histogram/metrics. Off by default. "
+                              "Random state is fixed at 42 in plot_classification_threshold.")
     p_eval.add_argument("--prefix", default="evaluation", help="Filename prefix for outputs.")
     p_eval.set_defaults(func=cmd_evaluate)
 
