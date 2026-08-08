@@ -603,35 +603,6 @@ def plot_evaluation_summary(bar_data, ranked_df, immunogenic_col, score_col, pre
     ax2.set_ylim(0, 105)
     ax2.legend(loc="lower right")
 
-    # # --- Panel 3: per-bin histogram, total bars, immunogenic count/% labelled ---
-    # lo = float(np.floor(ranked_df[score_col].min() / bin_width) * bin_width)
-    # hi = float(np.ceil(ranked_df[score_col].max() / bin_width) * bin_width)
-    # hi = max(hi, lo + bin_width)
-    # bins = np.arange(lo, hi + bin_width, bin_width)
-
-    # total_counts, edges = np.histogram(ranked_df[score_col], bins=bins)
-    # immuno_scores = ranked_df.loc[ranked_df[immunogenic_col] == 1, score_col]
-    # immuno_counts, _ = np.histogram(immuno_scores, bins=bins)
-
-    # centers = (edges[:-1] + edges[1:]) / 2
-    # width = bin_width * 0.9
-    # ax3.bar(centers, total_counts, width=width, color="#55A868", edgecolor="white", linewidth=0.5,
-    #         label="All peptides in bin")
-    # for c, total, immuno in zip(centers, total_counts, immuno_counts):
-    #     if total == 0:
-    #         continue
-    #     pct = immuno / total * 100
-    #     ax3.text(c, total + max(total_counts) * 0.01, f"{int(immuno)}\n({pct:.0f}%)",
-    #               ha="center", va="bottom", fontsize=7)
-    # ax3.set_xlabel(score_col)
-    # ax3.set_ylabel("Number of peptides")
-    # ax3.set_title("Peptides per score bin\n(labels = validated immunogenic count / %)")
-    # ax3.legend(loc="upper right")
-
-    # fig.tight_layout()
-    # fig.savefig(output_path, dpi=200)
-    # plt.close(fig)
-
     # --- Panel 3: per-bin histogram, total bars with immunogenic bars overlaid in front ---
     lo = float(np.floor(ranked_df[score_col].min() / bin_width) * bin_width)
     hi = float(np.ceil(ranked_df[score_col].max() / bin_width) * bin_width)
