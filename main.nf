@@ -9,6 +9,7 @@ include {
     RUN_REPITOPE
     PROCESS_HLA_WORKFLOW_OUTPUT
     BUILD_FEATURE_TABLE
+    RUN_ML_PREDICTION
 } from './modules/processes/wrapper_processes'
 
 include {
@@ -151,24 +152,26 @@ workflow {
             }
             
             BUILD_FEATURE_TABLE(PROCESS_HLA_WORKFLOW_OUTPUT.out, 
-                                MTEC_WORKFLOW.out.mtec_expression_classification, 
+                                MTEC_WORKFLOW.out.mtec_raw_counts, 
                                 RUN_PATHOGENICITY.out.collectFile(name: 'pathogenicity_pyHex_out.csv'), 
                                 immuno_split.deepimmuno,
-                                immuno_split.prime)//,
+                                immuno_split.prime,
+                                RUN_SELF_SIMILARITY.out.collectFile(),
+                                TAP_WORKFLOW.out)//,
                                 // params.common_hla_alleles,
                                 // GET_ALL_ALLELES.out)
             
             outFiles = outFiles.mix(BUILD_FEATURE_TABLE.out)
+
+            if (params.use_ml_model) {
+                RUN_ML_PREDICTION(BUILD_FEATURE_TABLE.out,
+                                    params.prioritisation_model,
+                                    params.model_metadata)
+
+                outFiles = outFiles.mix(RUN_ML_PREDICTION.out)
+            }
+
         }
-
-        // TODO Prediction model
-        // if (params.use_ml_model) {
-        //     PRIORITISE_IMMUNONGENIC_PEPTIDES(GET_INPUT_PEPTIDES.out.collectFile(name: 'in-peptides_all.txt'),
-        //                                     BUILD_FEATURE_TABLE.out,
-        //                                     params.prioritisation_model)
-
-        //     outFiles = outFiles.mix(PRIORITISE_IMMUNONGENIC_PEPTIDES.out)
-        // }
 
     publish:
         outFiles = outFiles

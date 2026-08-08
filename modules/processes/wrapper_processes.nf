@@ -160,6 +160,8 @@ process BUILD_FEATURE_TABLE {
         path pathogenicity_file
         path deepimmuno_file
         path prime_file
+        path selfsimilarity
+        path tap
 
     output:
         path "combined_featureTable.csv"
@@ -172,7 +174,30 @@ process BUILD_FEATURE_TABLE {
             --prime $prime_file \
             --pathogenicity $pathogenicity_file \
             --mtec $mtec_file \
-            --output "combined_featureTable.csv"
+            --output "combined_featureTable.csv" \
+            --selfsimilarity $selfsimilarity \
+            --tap $tap
+    """
+}
+
+process RUN_ML_PREDICTION {
+    conda "${params.env_ml_pred}"
+    input:
+        path featureTable
+        path model 
+        path model_metadata
+
+    output:
+        path "prioritised_ml_preds.csv"
+
+    script:
+    """
+        python ${params.ml_prediction_script} \
+            -f $featureTable \
+            -m $model \
+            -d $model_metadata \
+            --output "prioritised_ml_preds.csv" \
+            --verbose
     """
 }
 

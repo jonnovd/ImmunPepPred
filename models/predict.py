@@ -34,6 +34,11 @@ def parse_args():
         "-o", "--output", default="immunogenicity_prioritisation.csv",
         help="Path to output CSV (default: immunogenicity_prioritisation.csv)."
     )
+    parser.add_argument(
+        "-v", "--verbose", action="store_true",
+        help="Output is merged prediction file and feature table"
+    )
+
     return parser.parse_args()
 
 
@@ -128,14 +133,11 @@ def main():
         "probability_immunogenic": prob_immunogenic,
         #"best_binding_allele": df["best_allele"],
     })
-    # out_df = pd.DataFrame({
-    #         "peptide": df["peptide"],
-    #         "prediction": prediction,
-    #         "probability_immunogenic": prob_immunogenic,
-    #     })
-
-    # Append feature columns
-    out_df = pd.concat([out_df, df[features].reset_index(drop=True)], axis=1)
+    if args.verbose:
+        out_df = pd.concat([out_df, df.reset_index(drop=True)], axis=1)
+    else:
+        # Append feature columns
+        out_df = pd.concat([out_df, df[features].reset_index(drop=True)], axis=1)
 
     # Sort most to least likely immunogenic
     out_df = out_df.sort_values("probability_immunogenic", ascending=False).reset_index(drop=True)

@@ -25,9 +25,12 @@ local/results/
 bin/PRIME-2.1.zip
 bin/DeepImmuno/
 bin/PRIME-2.1/
+bin/ml_model
 *.venv
 models/data/
 models/saved_models/*
 models/*.zip
 models/ml-pipeline/results/*
 models/ml-pipeline/.venv*
+models/ml-pipeline/*.yaml
+models/ml-pipeline/features/*

@@ -109,8 +109,8 @@ def get_binding_alleles(df: pd.DataFrame, rank_cols: list[str]) -> tuple[pd.Seri
     strong = melted[melted['rank'] < 0.5]
     weak = melted[melted['rank'] < 2]
 
-    strong_alleles = strong.groupby('peptide')['allele'].apply(lambda x: ','.join(sorted(x.unique())))
-    weak_alleles = weak.groupby('peptide')['allele'].apply(lambda x: ','.join(sorted(x.unique())))
+    strong_alleles = strong.groupby('peptide')['allele'].apply(lambda x: ';'.join(sorted(x.unique())))
+    weak_alleles = weak.groupby('peptide')['allele'].apply(lambda x: ';'.join(sorted(x.unique())))
 
     return strong_alleles, weak_alleles
 

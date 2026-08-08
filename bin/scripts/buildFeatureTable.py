@@ -41,6 +41,7 @@ TOOL_ALIASES = {
 }
 
 NUM_TOOLS_COLS = ['Num_Tools_0_05', 'Num_Tools_0_10', 'Num_Tools_0_50']
+EXTRA_HLA_FEATS = ['all_strong_binders', 'all_weak_binders']
 
 
 # ---------------------------------------------------------------------------
@@ -69,7 +70,7 @@ def process_hla_file(filepath: str) -> pd.DataFrame:
     _validate_peptide_column(df, filepath)
 
     model_cols = ['peptide', 'best_rank', 'avg_rank',
-                  'strong_binders_count', 'weak_binders_count'] + NUM_TOOLS_COLS
+                  'strong_binders_count', 'weak_binders_count'] + NUM_TOOLS_COLS + EXTRA_HLA_FEATS
     model_cols = [c for c in model_cols if c in df.columns]
 
     for rank_col, allele_col in TOOL_ALIASES.values():
@@ -184,8 +185,6 @@ def main(argv=None) -> None:
     print(f"Processing TAP file: {args.prime}")
     tap_df = process_default_file(args.tap)
     tap_df.rename(columns={'pred_score' : 'tap_score'}, inplace=True)
-
-
     # TODO DONE
 
     print("Merging feature tables on 'peptide'...")

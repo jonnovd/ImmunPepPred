@@ -19,6 +19,10 @@ workflow MTEC_WORKFLOW {
     main:
         automaton_ch = BUILD_AUTOMATON(peptide_file_ch)
 
+        // TODO - Logic for running only a few thousand peptides:
+        // Rather combine all MTEC searches into a single process
+        // Less strain on an HPC queueing system
+
         mtec_files_ch   = Channel.fromPath(params.mtec_files)
         //                            .splitText(by: params.mtec_batchSize)
         // Convert to Channel containing: file, batch_number
