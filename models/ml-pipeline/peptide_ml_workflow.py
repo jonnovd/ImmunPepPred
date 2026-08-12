@@ -401,6 +401,106 @@ def plot_models_meanbar(results_dfs, output_path, error_bars="sd", capsize=0.15,
     fig.savefig(output_path, dpi=200)
     plt.close(fig)
 
+COMPARISON_METRICS = ["precision", "avg_precision", "roc_auc"]
+METRIC_DISPLAY_NAMES = {
+    "precision": "Precision",
+    "avg_precision": "Average Precision",
+    "roc_auc": "AUROC",
+    "recall": "Recall",
+    "f0.5": "F0.5",
+}
+MODEL_DISPLAY_NAMES = {
+    "logreg": "LR",
+    "svm_linear": "SVM (linear)",
+    "svm_rbf": "SVM",
+    "rf": "RF",
+    "hgb": "HGB",
+}
+
+def load_raw_cv_results(output_root: Path, training_set_names: list[str]) -> pd.DataFrame:
+    """Load the per-fold CV results (model, fold, metric, score) that `train`
+    saves for each training set, tagging every row with its training-set
+    name so several training sets can be plotted together."""
+    frames = []
+    for name in training_set_names:
+        raw_path = output_root / "saved_models" / name / "models_cv_metrics_raw.csv"
+        if not raw_path.exists():
+            sys.exit(f"ERROR: no raw CV results found for training set '{name}' at {raw_path}. "
+                      f"Re-run `train` for this training set — raw per-fold results are only saved "
+                      f"by the current version of `train`, so older runs won't have this file yet.")
+        df = pd.read_csv(raw_path)
+        df["training_set"] = name
+        frames.append(df)
+    return pd.concat(frames, ignore_index=True)
+
+
+def plot_metric_comparison_across_training_sets(combined_raw, metrics, output_dir: Path,
+                                                   models=None, error_bars="sd", capsize=0.15,
+                                                   palette=None, font_family=None,
+                                                   axis_label_fontsize=12, tick_label_fontsize=10,
+                                                   legend_fontsize=10):
+    """One figure PER metric: x = model architecture, one bar per training
+    set (hue), mean CV score with error bars across folds. No title; y-axis
+    label is just the metric name — meant for direct use in a paper.
+
+    palette: seaborn palette — a colormap name (e.g. "Set2", "muted"), a
+        list of colors matched to training sets in order, or a dict mapping
+        training-set name -> color (hex or named). None = seaborn default.
+    font_family: e.g. "Arial", "Times New Roman". None = matplotlib default
+        (whatever's set in rcParams / your local font config).
+    """
+    if sns is None:
+        print("WARNING: seaborn not installed, skipping training-set comparison figures.", file=sys.stderr)
+        return []
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    training_sets = list(combined_raw["training_set"].unique())
+    all_models = models or sorted(combined_raw["model"].unique())
+
+    # A model missing from some (but not all) training sets would otherwise
+    # show up as a silently absent bar; call it out explicitly instead.
+    for m in all_models:
+        present_in = combined_raw.loc[combined_raw["model"] == m, "training_set"].unique()
+        missing = set(training_sets) - set(present_in)
+        if missing:
+            print(f"WARNING: model '{m}' has no results for training set(s) {sorted(missing)}; "
+                  f"its bar will be absent there.", file=sys.stderr)
+
+    output_paths = []
+    for metric_name in metrics:
+        subset = combined_raw[(combined_raw["metric"] == metric_name) & (combined_raw["model"].isin(all_models))].copy()
+        if subset.empty:
+            print(f"WARNING: no results found for metric '{metric_name}', skipping.", file=sys.stderr)
+            continue
+
+        subset["model_display"] = subset["model"].map(lambda m: MODEL_DISPLAY_NAMES.get(m, m))
+        display_order = [MODEL_DISPLAY_NAMES.get(m, m) for m in all_models]
+
+        fig, ax = plt.subplots(figsize=(max(6, 1.5 * len(all_models)), 5))
+        sns.barplot(data=subset, x="model_display", y="score", hue="training_set", ax=ax,
+                    errorbar=error_bars, capsize=capsize, order=display_order, palette=palette, legend=False)
+        ax.set_ylabel(METRIC_DISPLAY_NAMES.get(metric_name, metric_name),
+                       fontsize=axis_label_fontsize, fontfamily=font_family)
+        ax.set_xlabel("", fontsize=axis_label_fontsize, fontfamily=font_family)
+        ax.tick_params(axis="x", labelsize=tick_label_fontsize)
+        ax.tick_params(axis="y", labelsize=tick_label_fontsize)
+        if font_family:
+            for label in ax.get_xticklabels() + ax.get_yticklabels():
+                label.set_fontfamily(font_family)
+        # ax.legend(title="Training set", loc="best", fontsize=legend_fontsize,
+        #           title_fontsize=legend_fontsize)
+        #ax.legend(title="Training set", loc="best")
+
+        fig.tight_layout()
+        out_path = output_dir / f"{metric_name}_by_model_and_training_set.png"
+        fig.savefig(out_path, dpi=300)
+        plt.close(fig)
+        print(f"Wrote {out_path}")
+        output_paths.append(out_path)
+
+    return output_paths
+
+
 
 def save_model(pipe, best_params, results_df, output_dir: Path, model_name: str,
                 training_set_name: str, features: list[str], n_train_samples: int):
@@ -482,6 +582,7 @@ def train_one_training_set(ts_cfg: dict, global_cfg: dict, models_filter: list[s
         plot_models_meanbar(all_results, out_dir / "models_mean_metrics.png",
                              title_suffix=f" ({name})")
         combined = pd.concat(all_results, ignore_index=True)
+        combined.to_csv(out_dir / "models_cv_metrics_raw.csv", index=False)
         summary = combined.groupby(["metric", "model"])["score"].mean()
         print(summary)
         summary.to_csv(out_dir / "models_cv_metrics_summary.csv")
@@ -490,6 +591,119 @@ def train_one_training_set(ts_cfg: dict, global_cfg: dict, models_filter: list[s
 
     return out_dir
 
+# ======================================================================
+# Compare-Champion (plot chosen model against single feature LogRegs)
+# ======================================================================
+
+def run_fixed_params_cv(model_name, X, y, cv_folds, params_clf_prefixed, scoring, label=None):
+    """Cross-validate a model at FIXED hyperparameters (no search) — used to
+    re-score an already-chosen 'champion' model on a fresh set of CV folds,
+    for a same-folds comparison against other baselines.
+    `params_clf_prefixed` is a dict like {"clf__max_iter": 200, ...} (same
+    format as GridSearchCV's best_params_ / metadata's "best_params").
+    """
+    spec = MODEL_REGISTRY[model_name]
+    pipe = spec["search_pipeline"]()
+    pipe.set_params(**params_clf_prefixed)
+
+    cv_results = cross_validate(pipe, X, y, cv=cv_folds, scoring=scoring, n_jobs=-1)
+
+    label = label or model_name
+    rows = []
+    for metric_name in scoring:
+        fold_scores = cv_results[f"test_{metric_name}"]
+        for fold_idx, score in enumerate(fold_scores):
+            rows.append({"model": label, "fold": fold_idx, "metric": metric_name,
+                         "score": score, "params": str(params_clf_prefixed)})
+    return pd.DataFrame(rows)
+
+
+def run_single_feature_baselines(X_full, y, cv_folds, feature_names, feature_indices,
+                                   scoring, refit_metric="precision", param_grid=None):
+    """Run a small logistic-regression grid search using exactly ONE feature
+    at a time, for each feature in `feature_names`, on the same CV folds as
+    everything else being compared. Returns one concatenated results_df.
+    """
+    all_results = []
+    for feat_name, feat_idx in zip(feature_names, feature_indices):
+        X_single = X_full[:, [feat_idx]]
+        print(f"Single-feature baseline: logreg on '{feat_name}' alone")
+        results_df, _, _ = run_model_grid_search(
+            "logreg", X_single, y, cv_folds, param_grid, scoring, refit_metric,
+        )
+        results_df["model"] = f"logreg ({feat_name})"
+        all_results.append(results_df)
+    return pd.concat(all_results, ignore_index=True)
+
+
+def plot_feature_baseline_comparison(combined_df, output_path,
+                                      title="Champion model vs single-feature baselines"):
+    if sns is None:
+        print("WARNING: seaborn not installed, skipping feature-baseline comparison figure.",
+              file=sys.stderr)
+        return
+    fig, ax = plt.subplots(figsize=(max(8, 1.2 * combined_df["model"].nunique()), 6))
+    sns.barplot(data=combined_df, x="model", y="score", hue="metric", ax=ax,
+                errorbar="sd", capsize=0.1)
+    ax.set_ylabel("score")
+    ax.set_xlabel("")
+    ax.set_title(title)
+    ax.tick_params(axis="x", rotation=45)
+    ax.legend(title="metric", loc="upper right")
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=200)
+    plt.close(fig)
+
+
+def compare_champion_to_single_features(
+        feature_table_path, immunogenic_path, non_immunogenic_path,
+        champion_model_name, champion_features_file, single_feature_names, output_dir: Path,
+        champion_model_path=None, champion_metadata_path=None,
+        n_splits=DEFAULT_N_SPLITS, n_repeats=DEFAULT_N_REPEATS, random_state=DEFAULT_RANDOM_STATE,
+        refit_metric=DEFAULT_REFIT_METRIC):
+    output_dir.mkdir(parents=True, exist_ok=True)
+    champion_features = load_feature_list(champion_features_file)
+    # one feature-table load covering both the champion's features and the single ones
+    all_needed_features = list(dict.fromkeys(champion_features + single_feature_names))
+    df, X_full, y = build_labelled_dataset(feature_table_path, all_needed_features,
+                                            immunogenic_path, non_immunogenic_path)
+
+    lengths = df["length"].to_numpy() if "length" in df.columns else df["peptide"].str.len().to_numpy()
+    cv_folds = build_cv_folds(X_full, y, lengths, n_splits, n_repeats, random_state)
+
+    scoring = {"precision": DEFAULT_SCORING["precision"], "avg_precision": DEFAULT_SCORING["avg_precision"]}
+
+    champion_idx = [all_needed_features.index(f) for f in champion_features]
+    X_champion = X_full[:, champion_idx]
+    if champion_model_path and champion_metadata_path:
+        with open(champion_metadata_path) as f:
+            meta = json.load(f)
+        champion_results = run_fixed_params_cv(
+            champion_model_name, X_champion, y, cv_folds, meta["best_params"], scoring,
+            label=f"{champion_model_name} (full, saved params)",
+        )
+    else:
+        print(f"No saved champion model given, running a fresh grid search for {champion_model_name}.")
+        champion_results, _, _ = run_model_grid_search(
+            champion_model_name, X_champion, y, cv_folds, None, scoring, refit_metric,
+        )
+        champion_results["model"] = f"{champion_model_name} (full, {len(champion_features)} feat)"
+
+    single_idx = [all_needed_features.index(f) for f in single_feature_names]
+    baseline_results = run_single_feature_baselines(
+        X_full, y, cv_folds, single_feature_names, single_idx, scoring, refit_metric,
+    )
+
+    combined = pd.concat([champion_results, baseline_results], ignore_index=True)
+    combined.to_csv(output_dir / "feature_baseline_comparison.csv", index=False)
+
+    fig_path = output_dir / "feature_baseline_comparison.png"
+    plot_feature_baseline_comparison(
+        combined, fig_path,
+        title=f"{champion_model_name} (full feature set) vs single-feature logreg baselines",
+    )
+    print(f"Wrote {fig_path}")
+    return combined
 
 # ======================================================================
 # Predict (load saved pipeline + metadata, score a feature table)
@@ -568,6 +782,86 @@ def compute_cumulative_capture_curve(ranked_df, immunogenic_col):
     x = [(i + 1) / n * 100 for i in range(n)]
     y = [(c / total_immunogenic * 100) for c in cum]
     return [0] + x, [0] + y
+
+def compute_precision_at_k(df, label_col, score_col, fractions, lower_is_better=False):
+    """precision@k = fraction of the top-k% (by score_col) that are actually
+    positive. Purely rank-based — invariant to any monotonic rescoring."""
+    ranked = df.sort_values(score_col, ascending=lower_is_better, kind="mergesort").reset_index(drop=True)
+    n = len(ranked)
+    results = {}
+    for f in fractions:
+        k = max(1, math.ceil(n * f / 100)) if n > 0 else 0
+        results[f] = float(ranked.iloc[:k][label_col].mean()) if k > 0 else float("nan")
+    return results
+
+
+# def plot_precision_at_k_comparison(model_name, model_precisions, prime_precisions, fractions, output_path):
+#     x = np.arange(len(fractions))
+#     width = 0.35
+#     fig, ax = plt.subplots(figsize=(8, 6))
+#     model_vals = [model_precisions[f] * 100 for f in fractions]
+#     prime_vals = [prime_precisions[f] * 100 for f in fractions]
+#     bars1 = ax.bar(x - width / 2, model_vals, width, label=model_name, color="#4C72B0")
+#     bars2 = ax.bar(x + width / 2, prime_vals, width, label="PRIME", color="#DD8452")
+#     for bars in (bars1, bars2):
+#         for b in bars:
+#             ax.text(b.get_x() + b.get_width() / 2, b.get_height() + 1, f"{b.get_height():.1f}%",
+#                      ha="center", va="bottom", fontsize=9)
+#     ax.set_xticks(x)
+#     ax.set_xticklabels([f"Top {f}%" for f in fractions])
+#     ax.set_ylabel("Precision@k (% of top-k peptides that are validated immunogenic)")
+#     ax.set_ylim(0, 105)
+#     ax.set_title(f"Precision@k: {model_name} vs PRIME")
+#     ax.legend()
+#     fig.tight_layout()
+#     fig.savefig(output_path, dpi=200)
+#     plt.close(fig)
+#     return {"model": model_precisions, "prime": prime_precisions}
+def compute_random_baseline_precision(df, label_col):
+    """Expected precision@k for a random ranking = overall prevalence of
+    positives, constant regardless of k (a random subset's expected positive
+    fraction equals the population's, independent of subset size)."""
+    return float(df[label_col].mean())
+
+def plot_precision_at_k_comparison(model_name, model_precisions, prime_precisions, fractions, output_path,
+                                    baseline_precision=None):
+    x = np.arange(len(fractions))
+    fig, ax = plt.subplots(figsize=(8, 6))
+
+    model_vals = [model_precisions[f] * 100 for f in fractions]
+    prime_vals = [prime_precisions[f] * 100 for f in fractions]
+
+    ax.plot(x, model_vals, marker="o", linewidth=2, color="#4C72B0", label=model_name)
+    ax.plot(x, prime_vals, marker="o", linewidth=2, color="#DD8452", label="PRIME")
+
+    for xi, v in zip(x, model_vals):
+        ax.text(xi, v + 2, f"{v:.1f}%", ha="center", va="bottom", fontsize=9, color="#4C72B0")
+    for xi, v in zip(x, prime_vals):
+        ax.text(xi, v - 2, f"{v:.1f}%", ha="center", va="top", fontsize=9, color="#DD8452")
+
+    if baseline_precision is not None:
+        baseline_pct = baseline_precision * 100
+        ax.axhline(baseline_pct, color="gray", linestyle="--", linewidth=1.5,
+                    label=f"Random baseline (prevalence = {baseline_pct:.1f}%)")
+
+    ax.set_xticks(x)
+    ax.set_xticklabels([f"Top {f}%" for f in fractions])
+    ax.set_xlabel("k (top % of peptides by score)")
+    ax.set_ylabel("Precision@k (% of top-k peptides that are validated immunogenic)")
+    ax.set_ylim(0, 105)
+    ax.set_title(f"Precision@k: {model_name} vs PRIME")
+    ax.legend(loc="best")
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=200)
+    plt.close(fig)
+    return {"model": model_precisions, "prime": prime_precisions, "random_baseline": baseline_precision}
+
+
+def load_prime_scores(feature_table_path, prime_score_col):
+    df = pd.read_csv(feature_table_path)
+    if prime_score_col not in df.columns:
+        sys.exit(f"ERROR: PRIME score column '{prime_score_col}' not found in '{feature_table_path}'.")
+    return df[["peptide", prime_score_col]].drop_duplicates(subset="peptide")
 
 
 def plot_evaluation_summary(bar_data, ranked_df, immunogenic_col, score_col, prediction_pct,
@@ -706,6 +1000,73 @@ def plot_classification_threshold(df_labelled, score_col, label_col, threshold, 
     return {"tp": tp, "fn": fn, "fp": fp, "tn": tn, "recall": recall,
             "specificity": specificity, "precision": precision, "accuracy": accuracy}
 
+# Calibration curve
+def compute_calibration_curve(y_true, y_prob, n_bins=10, strategy="quantile"):
+    """Bins peptides by predicted probability and computes, per bin, the
+    observed fraction that are actually immunogenic vs the mean predicted
+    probability — plus overall Brier score and Expected Calibration Error
+    (ECE). Use 'quantile' bins (equal count per bin) by default since
+    'uniform' equal-width bins can end up nearly empty under class
+    imbalance, which makes individual bins unreliable/noisy.
+    """
+    df = pd.DataFrame({"y_true": y_true, "y_prob": y_prob}).dropna()
+    if strategy == "quantile":
+        try:
+            df["bin"] = pd.qcut(df["y_prob"], q=n_bins, duplicates="drop")
+        except ValueError:
+            df["bin"] = pd.cut(df["y_prob"], bins=n_bins)
+    else:
+        df["bin"] = pd.cut(df["y_prob"], bins=np.linspace(0, 1, n_bins + 1))
+
+    grouped = df.groupby("bin", observed=True).agg(
+        bin_center=("y_prob", "mean"),
+        observed_freq=("y_true", "mean"),
+        count=("y_true", "size"),
+    ).reset_index(drop=True)
+
+    brier = float(np.mean((df["y_prob"] - df["y_true"]) ** 2))
+    ece = float(np.sum(np.abs(grouped["observed_freq"] - grouped["bin_center"]) * grouped["count"]) / len(df))
+    return grouped, brier, ece
+
+
+def plot_calibration_curve(df_labelled, score_col, label_col, output_path, n_bins=10, strategy="quantile"):
+    y_true = df_labelled[label_col].to_numpy()
+    y_prob = df_labelled[score_col].to_numpy()
+
+    grouped, brier, ece = compute_calibration_curve(y_true, y_prob, n_bins=n_bins, strategy=strategy)
+    mean_predicted = float(np.mean(y_prob))
+    actual_prevalence = float(np.mean(y_true))
+
+    small_bins = grouped[grouped["count"] < 5]
+    if len(small_bins):
+        print(f"WARNING: {len(small_bins)} calibration bin(s) have <5 samples; "
+              f"consider a smaller --calibration-n-bins.", file=sys.stderr)
+
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(7, 8), gridspec_kw={"height_ratios": [3, 1]}, sharex=True)
+
+    ax1.plot([0, 1], [0, 1], linestyle="--", color="gray", label="Perfectly calibrated")
+    ax1.plot(grouped["bin_center"], grouped["observed_freq"], marker="o", color="#4C72B0", label=score_col)
+    ax1.set_ylabel("Observed frequency (validated immunogenic)")
+    ax1.set_title("Calibration curve (reliability diagram)")
+    ax1.set_xlim(0, 1)
+    ax1.set_ylim(0, 1)
+    ax1.legend(loc="upper left")
+    metrics_text = (f"Brier score: {brier:.3f} (lower is better)\n"
+                     f"Expected Calibration Error: {ece:.3f}\n"
+                     f"Mean predicted probability: {mean_predicted:.3f}\n"
+                     f"Actual prevalence (this set): {actual_prevalence:.3f}")
+    ax1.text(0.98, 0.03, metrics_text, transform=ax1.transAxes, fontsize=9, va="bottom", ha="right",
+             bbox=dict(boxstyle="round", facecolor="white", edgecolor="gray", alpha=0.9))
+
+    ax2.hist(y_prob, bins=np.linspace(0, 1, 21), color="#55A868", edgecolor="white", linewidth=0.5)
+    ax2.set_xlabel(score_col)
+    ax2.set_ylabel("Count")
+
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=200)
+    plt.close(fig)
+    return {"brier_score": brier, "ece": ece, "mean_predicted_probability": mean_predicted,
+            "actual_prevalence": actual_prevalence}
 
 def evaluate_predictions(predictions_csv: str, immunogenic_peptides_path: str,
                           non_immunogenic_peptides_path: str, output_dir: Path,
@@ -713,7 +1074,11 @@ def evaluate_predictions(predictions_csv: str, immunogenic_peptides_path: str,
                           score_col: str = "probability_immunogenic",
                           bin_width_capture: float = 0.02, threshold: float = 0.5,
                           threshold_bin_width: float = 0.05, lower_is_better: bool = False,
-                          upsample: bool = False, prefix: str = "evaluation"):
+                          upsample: bool = False, 
+                          check_calibration=False, calibration_n_bins=10, calibration_strategy="quantile",
+                          prime_feature_table=None, prime_score_col=None,
+                          prime_lower_is_better=True, precision_at_k_fractions=(10, 20, 30),
+                          prefix: str = "evaluation"):
     output_dir.mkdir(parents=True, exist_ok=True)
     df = pd.read_csv(predictions_csv)
     required = {"peptide", score_col}
@@ -786,8 +1151,49 @@ def evaluate_predictions(predictions_csv: str, immunogenic_peptides_path: str,
     print(f"Wrote classification-threshold figure to {threshold_fig_path}")
     print(metrics)
 
+    calibration_metrics = None
+    if check_calibration:
+        if lower_is_better:
+            print("NOTE: skipping calibration check — rank-style scores (lower_is_better=True) "
+                  "aren't probabilities, so a reliability diagram doesn't apply.", file=sys.stderr)
+        else:
+            calib_fig_path = output_dir / f"{prefix}_calibration.png"
+            calibration_metrics = plot_calibration_curve(
+                df_labelled, score_col, "validated_immunogenic", calib_fig_path,
+                n_bins=calibration_n_bins, strategy=calibration_strategy,
+            )
+            print(f"Wrote calibration figure to {calib_fig_path}")
+            print(calibration_metrics)
+
+    precision_at_k_results = None
+    if prime_feature_table and prime_score_col:
+        prime_scores = load_prime_scores(prime_feature_table, prime_score_col)
+        if prime_score_col in df_labelled.columns:
+            df_pk = df_labelled
+        else:
+            df_pk = df_labelled.merge(prime_scores, on="peptide", how="inner")
+        
+        n_dropped = len(df_labelled) - len(df_pk)
+        if n_dropped:
+            print(f"NOTE: {n_dropped} peptide(s) had no PRIME score and were excluded from precision@k.",
+                  file=sys.stderr)
+        model_pk = compute_precision_at_k(df_pk, "validated_immunogenic", score_col,
+                                           precision_at_k_fractions, lower_is_better)
+        prime_pk = compute_precision_at_k(df_pk, "validated_immunogenic", prime_score_col,
+                                           precision_at_k_fractions, prime_lower_is_better)
+
+        baseline_pk = compute_random_baseline_precision(df_pk, "validated_immunogenic")
+
+        pk_fig_path = output_dir / f"{prefix}_precision_at_k.png"
+        precision_at_k_results = plot_precision_at_k_comparison(
+            prefix, model_pk, prime_pk, precision_at_k_fractions, pk_fig_path,
+            baseline_precision=baseline_pk,
+        )
+        print(f"Wrote precision@k comparison to {pk_fig_path}")
+
     return annotated_csv, {"summary_figure": str(summary_fig_path),
-                            "threshold_figure": str(threshold_fig_path), "metrics": metrics}
+                            "threshold_figure": str(threshold_fig_path), "metrics": metrics,
+                            "calibration_metrics": calibration_metrics}
 
 
 # ======================================================================
@@ -895,6 +1301,13 @@ def cmd_evaluate(args):
                     threshold_bin_width=validation.get("threshold_bin_width", 0.05),
                     lower_is_better=validation.get("lower_is_better", False),
                     upsample=validation.get("upsample", False),
+                    check_calibration=validation.get("check_calibration", False),
+                    calibration_strategy=validation.get("calibration_strategy", "quantile"),
+                    calibration_n_bins=validation.get("calibration_n_bins", 10),
+                    prime_feature_table=validation.get("prime_feature_table", None), 
+                    prime_score_col=validation.get("prime_score_col", None),
+                    prime_lower_is_better= not (validation.get("prime_higher_is_better", False)), 
+                    precision_at_k_fractions=validation.get("precision_at_k_fractions", (10, 20, 30)),
                     prefix=model_name,
                 )
     else:
@@ -905,7 +1318,14 @@ def cmd_evaluate(args):
             peptides_of_interest_path=args.peptides, score_col=args.score_column,
             bin_width_capture=args.bin_width_capture, threshold=args.threshold,
             threshold_bin_width=args.threshold_bin_width, lower_is_better=args.lower_is_better,
-            upsample=validation.get("upsample", False),
+            upsample=args.upsample,
+            check_calibration=args.check_calibration,
+            calibration_strategy=args.calibration_strategy,
+            calibration_n_bins=args.calibration_n_bins,
+            prime_feature_table=args.prime_feature_table, 
+            prime_score_col=args.prime_score_col,
+            prime_lower_is_better=(not args.prime_higher_is_better), 
+            precision_at_k_fractions=args.precision_at_k_fractions,
             prefix=args.prefix,
         )
 
@@ -919,6 +1339,41 @@ def cmd_run(args):
     cmd_train(args)
     cmd_predict(args)
     cmd_evaluate(args)
+
+def cmd_compare_features(args):
+    compare_champion_to_single_features(
+        args.feature_table, args.immunogenic, args.non_immunogenic,
+        args.champion_model, args.champion_features_file, args.single_features,
+        Path(args.output_dir),
+        champion_model_path=args.champion_model_path, champion_metadata_path=args.champion_metadata_path,
+        n_splits=args.n_splits, n_repeats=args.n_repeats, random_state=args.random_state,
+        refit_metric=args.refit_metric,
+    )
+
+def cmd_compare_training_sets(args):
+    """Post-hoc: compare already-trained models across >=2 training sets,
+    one figure per metric (paper-figure style: no title, y-label = metric only).
+    """
+    if not args.config:
+        sys.exit("ERROR: `compare-training-sets` requires --config (training sets are located via "
+                  "the config's output_root).")
+    cfg = load_config(args.config)
+    output_root = resolve_output_root(cfg, args.output_dir)
+    if not args.training_set or len(args.training_set) < 2:
+        sys.exit("ERROR: pass at least two --training-set NAME entries to compare "
+                  "(e.g. --training-set setA --training-set setB --training-set setC).")
+
+    combined_raw = load_raw_cv_results(output_root, args.training_set)
+    metrics = args.metrics or COMPARISON_METRICS
+    comparison_dir = output_root / "comparison"
+    palette = args.palette[0] if args.palette and len(args.palette) == 1 else args.palette
+    plot_metric_comparison_across_training_sets(
+        combined_raw, metrics, comparison_dir, models=args.models,
+        palette=palette, font_family=args.font_family,
+        axis_label_fontsize=args.axis_label_fontsize,
+        tick_label_fontsize=args.tick_label_fontsize,
+        legend_fontsize=args.legend_fontsize,
+    )
 
 
 def _require(args, names, context):
@@ -996,8 +1451,63 @@ def build_parser():
                               "non-immunogenic) to match the larger one before computing the "
                               "classification-threshold histogram/metrics. Off by default. "
                               "Random state is fixed at 42 in plot_classification_threshold.")
+    p_eval.add_argument("--check-calibration", action="store_true")
+    p_eval.add_argument("--calibration-strategy", type=str, default="quantile")
+    p_eval.add_argument("--calibration-n-bins", type=float, default=10)
     p_eval.add_argument("--prefix", default="evaluation", help="Filename prefix for outputs.")
+    p_eval.add_argument("--prime-feature-table", help="Raw feature table containing PRIME's score column.")
+    p_eval.add_argument("--prime-score-col", help="Column name of PRIME's score in --prime-feature-table.")
+    p_eval.add_argument("--prime-higher-is-better", action="store_true",
+                         help="Set if higher PRIME score = more immunogenic. Default assumes "
+                              "PRIME %%Rank, where LOWER is better.")
+    p_eval.add_argument("--precision-at-k-fractions", nargs="+", type=int, default=[10, 20, 30])
     p_eval.set_defaults(func=cmd_evaluate)
+
+    p_cmp = sub.add_parser("compare-features",
+        help="Compare a champion model (full features) vs single-feature logreg baselines, same axes.")
+    p_cmp.add_argument("--feature-table", required=True)
+    p_cmp.add_argument("--immunogenic", required=True)
+    p_cmp.add_argument("--non-immunogenic", required=True)
+    p_cmp.add_argument("--champion-model", required=True, choices=list(MODEL_REGISTRY))
+    p_cmp.add_argument("--champion-features-file", required=True)
+    p_cmp.add_argument("--champion-model-path",
+        help="Optional: reuse an already-trained champion's hyperparameters instead of re-searching.")
+    p_cmp.add_argument("--champion-metadata-path", help="Metadata JSON matching --champion-model-path.")
+    p_cmp.add_argument("--single-features", nargs="+", required=True,
+        help="Feature/column names to test individually, one logreg model each.")
+    p_cmp.add_argument("--output-dir", required=True)
+    p_cmp.add_argument("--n-splits", type=int, default=DEFAULT_N_SPLITS)
+    p_cmp.add_argument("--n-repeats", type=int, default=DEFAULT_N_REPEATS)
+    p_cmp.add_argument("--random-state", type=int, default=DEFAULT_RANDOM_STATE)
+    p_cmp.add_argument("--refit-metric", default=DEFAULT_REFIT_METRIC)
+    p_cmp.set_defaults(func=cmd_compare_features)
+
+    # --- compare-training-sets ---
+    p_cmpts = sub.add_parser(
+        "compare-training-sets",
+        help="One bar chart per metric (default: precision, avg_precision, roc_auc), "
+             "grouped by model architecture with one bar per training set. Paper-figure "
+             "style: no title, y-axis label = metric name only.",
+    )
+    p_cmpts.add_argument("--config", required=True)
+    p_cmpts.add_argument("--training-set", action="append", required=True,
+                          help="Training-set name to include (repeatable, need >=2).")
+    p_cmpts.add_argument("--models", nargs="+", choices=list(MODEL_REGISTRY),
+                          help="Restrict to these model architectures (default: all found).")
+    p_cmpts.add_argument("--metrics", nargs="+",
+                          choices=["precision", "recall", "roc_auc", "avg_precision", "f0.5"],
+                          help="Metrics to plot, one figure each (default: precision avg_precision roc_auc).")
+    p_cmpts.add_argument("--output-dir", help="Override output_root (figures go in {output_root}/comparison/).")
+    p_cmpts.add_argument("--palette", nargs="+",
+                          help="Bar colors: one seaborn palette name (e.g. Set2, muted), or a list "
+                               "of hex colors matched to training sets in order, e.g. "
+                               "--palette '#1b9e77' '#d95f02' '#7570b3'.")
+    p_cmpts.add_argument("--font-family", help="Font for axis/tick labels, e.g. Arial, 'Times New Roman'.")
+    p_cmpts.add_argument("--axis-label-fontsize", type=int, default=12)
+    p_cmpts.add_argument("--tick-label-fontsize", type=int, default=10)
+    p_cmpts.add_argument("--legend-fontsize", type=int, default=10)
+    p_cmpts.set_defaults(func=cmd_compare_training_sets)
+
 
     # --- run (train + predict + evaluate, config-driven only) ---
     p_run = sub.add_parser("run", help="Full workflow (train -> predict -> evaluate) from a config file.")
