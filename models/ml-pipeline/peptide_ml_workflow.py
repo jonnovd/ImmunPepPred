@@ -40,6 +40,7 @@ import argparse
 import json
 import math
 import sys
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -61,7 +62,7 @@ from sklearn.calibration import CalibratedClassifierCV
 from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import fbeta_score, make_scorer
+from sklearn.metrics import fbeta_score, make_scorer, roc_curve, roc_auc_score
 from sklearn.model_selection import GridSearchCV, RepeatedStratifiedKFold, cross_validate
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import RobustScaler
@@ -72,6 +73,34 @@ try:
 except ImportError:
     yaml = None
 
+import matplotlib.font_manager as fm
+import seaborn as sns
+import glob, os
+
+FONT_DIR = "fonts"
+for f in glob.glob(os.path.join(FONT_DIR, "*.ttf")):
+    fm.fontManager.addfont(f)
+
+sns.set_style("ticks")
+plt.rcParams['font.family'] = 'Carlito'
+
+AXIS_LABEL_FONTSIZE = 20
+TICK_LABEL_FONTSIZE = 18
+LEGEND_FONTSIZE = 16
+POINT_LABEL_FONTSIZE = 14
+LINEWIDTH_MAIN = 2
+LINEWIDTH_REF = 1.5
+
+PALETTE = {
+    'CEDAR-pos': '#6AB9EC',
+    'CEDAR-neg': '#E26CE1',
+    'Random Self': '#7FD194',
+    'random-self': '#7FD194',
+    'augmented-neg': '#FCAC5C',
+    'precision': '#6AB9EC',
+    'avg_precision': '#E26CE1',
+}
+# ------------------------------------------------------------------
 
 # ======================================================================
 # Model registry
@@ -201,6 +230,8 @@ DEFAULT_REFIT_METRIC = "precision"
 DEFAULT_N_SPLITS = 5
 DEFAULT_N_REPEATS = 2
 DEFAULT_RANDOM_STATE = 42
+
+FEATURE_RENAMING_DICT = {'avg_rank' : 'HLA Rank', 'weak_binders_count' : 'HLA WBC', 'mtec_expression_count' : 'mTEC Expr.', 'pathogenicity' : 'Viral Similarity', 'di_best_score' : 'DeepImmuno', 'PRIME_%Rank_bestAllele' : 'PRIME Rank'}
 
 
 # ======================================================================
@@ -372,7 +403,7 @@ def plot_models_boxplot(results_dfs, output_path, title_suffix=""):
         ax.tick_params(axis="x", rotation=45)
     plt.suptitle(f"Model performance by metric — CV{title_suffix}")
     plt.tight_layout()
-    fig.savefig(output_path, dpi=200)
+    fig.savefig(output_path, dpi=300)
     plt.close(fig)
 
 
@@ -398,7 +429,7 @@ def plot_models_meanbar(results_dfs, output_path, error_bars="sd", capsize=0.15,
     axes[0].set_ylim(y_min - padding, y_max + padding)
     plt.suptitle(f"Mean model performance by metric — CV{title_suffix}, error bars = {error_bars}")
     plt.tight_layout()
-    fig.savefig(output_path, dpi=200)
+    fig.savefig(output_path, dpi=300)
     plt.close(fig)
 
 COMPARISON_METRICS = ["precision", "avg_precision", "roc_auc"]
@@ -434,11 +465,81 @@ def load_raw_cv_results(output_root: Path, training_set_names: list[str]) -> pd.
     return pd.concat(frames, ignore_index=True)
 
 
+# def plot_metric_comparison_across_training_sets(combined_raw, metrics, output_dir: Path,
+#                                                    models=None, error_bars="sd", capsize=0.15,
+#                                                    palette=None, font_family=None,
+#                                                    axis_label_fontsize=12, tick_label_fontsize=10,
+#                                                    legend_fontsize=10):
+#     """One figure PER metric: x = model architecture, one bar per training
+#     set (hue), mean CV score with error bars across folds. No title; y-axis
+#     label is just the metric name — meant for direct use in a paper.
+
+#     palette: seaborn palette — a colormap name (e.g. "Set2", "muted"), a
+#         list of colors matched to training sets in order, or a dict mapping
+#         training-set name -> color (hex or named). None = seaborn default.
+#     font_family: e.g. "Arial", "Times New Roman". None = matplotlib default
+#         (whatever's set in rcParams / your local font config).
+#     """
+#     if sns is None:
+#         print("WARNING: seaborn not installed, skipping training-set comparison figures.", file=sys.stderr)
+#         return []
+
+#     output_dir.mkdir(parents=True, exist_ok=True)
+#     training_sets = list(combined_raw["training_set"].unique())
+#     all_models = models or sorted(combined_raw["model"].unique())
+
+#     # A model missing from some (but not all) training sets would otherwise
+#     # show up as a silently absent bar; call it out explicitly instead.
+#     for m in all_models:
+#         present_in = combined_raw.loc[combined_raw["model"] == m, "training_set"].unique()
+#         missing = set(training_sets) - set(present_in)
+#         if missing:
+#             print(f"WARNING: model '{m}' has no results for training set(s) {sorted(missing)}; "
+#                   f"its bar will be absent there.", file=sys.stderr)
+
+#     output_paths = []
+#     for metric_name in metrics:
+#         subset = combined_raw[(combined_raw["metric"] == metric_name) & (combined_raw["model"].isin(all_models))].copy()
+#         if subset.empty:
+#             print(f"WARNING: no results found for metric '{metric_name}', skipping.", file=sys.stderr)
+#             continue
+
+#         subset["model_display"] = subset["model"].map(lambda m: MODEL_DISPLAY_NAMES.get(m, m))
+#         display_order = [MODEL_DISPLAY_NAMES.get(m, m) for m in all_models]
+
+#         fig, ax = plt.subplots(figsize=(max(6, 1.5 * len(all_models)), 5))
+#         sns.barplot(data=subset, x="model_display", y="score", hue="training_set", ax=ax,
+#                     errorbar=error_bars, err_kws={"linewidth": 1}, capsize=capsize, order=display_order, palette=palette, gap=0.1, legend=False)
+
+#         ax.set_ylim(0, 1)
+#         ax.spines[['top', 'right']].set_visible(False)
+
+#         ax.set_ylabel(METRIC_DISPLAY_NAMES.get(metric_name, metric_name),
+#                        fontsize=axis_label_fontsize, fontfamily=font_family)
+#         ax.set_xlabel("", fontsize=axis_label_fontsize, fontfamily=font_family)
+#         ax.tick_params(axis="x", labelsize=tick_label_fontsize)
+#         ax.tick_params(axis="y", labelsize=tick_label_fontsize)
+#         if font_family:
+#             for label in ax.get_xticklabels() + ax.get_yticklabels():
+#                 label.set_fontfamily(font_family)
+#         # ax.legend(title="Training set", loc="best", fontsize=legend_fontsize,
+#         #           title_fontsize=legend_fontsize)
+#         #ax.legend(title="Training set", loc="best")
+
+#         fig.tight_layout()
+#         out_path = output_dir / f"{metric_name}_by_model_and_training_set.png"
+#         fig.savefig(out_path, dpi=300)
+#         plt.close(fig)
+#         print(f"Wrote {out_path}")
+#         output_paths.append(out_path)
+
+#     return output_paths
+
 def plot_metric_comparison_across_training_sets(combined_raw, metrics, output_dir: Path,
                                                    models=None, error_bars="sd", capsize=0.15,
-                                                   palette=None, font_family=None,
-                                                   axis_label_fontsize=12, tick_label_fontsize=10,
-                                                   legend_fontsize=10):
+                                                   palette=PALETTE, font_family="Carlito",
+                                                   axis_label_fontsize=AXIS_LABEL_FONTSIZE, tick_label_fontsize=TICK_LABEL_FONTSIZE,
+                                                   legend_fontsize=LEGEND_FONTSIZE):
     """One figure PER metric: x = model architecture, one bar per training
     set (hue), mean CV score with error bars across folds. No title; y-axis
     label is just the metric name — meant for direct use in a paper.
@@ -478,7 +579,12 @@ def plot_metric_comparison_across_training_sets(combined_raw, metrics, output_di
 
         fig, ax = plt.subplots(figsize=(max(6, 1.5 * len(all_models)), 5))
         sns.barplot(data=subset, x="model_display", y="score", hue="training_set", ax=ax,
-                    errorbar=error_bars, capsize=capsize, order=display_order, palette=palette, legend=False)
+                    errorbar=error_bars, err_kws={"linewidth": 1}, capsize=capsize, order=display_order, 
+                    palette=palette, gap=0.1, alpha=0.6, legend=False)
+
+        ax.set_ylim(0, 1)
+        ax.spines[['top', 'right']].set_visible(False)
+
         ax.set_ylabel(METRIC_DISPLAY_NAMES.get(metric_name, metric_name),
                        fontsize=axis_label_fontsize, fontfamily=font_family)
         ax.set_xlabel("", fontsize=axis_label_fontsize, fontfamily=font_family)
@@ -636,22 +742,71 @@ def run_single_feature_baselines(X_full, y, cv_folds, feature_names, feature_ind
     return pd.concat(all_results, ignore_index=True)
 
 
-def plot_feature_baseline_comparison(combined_df, output_path,
+# def plot_feature_baseline_comparison(combined_df, output_path, palette=None, font_family="Arial", 
+#                                     axis_label_fontsize=9, tick_label_fontsize=9,
+#                                       title="Champion model vs single-feature baselines"):
+#     if sns is None:
+#         print("WARNING: seaborn not installed, skipping feature-baseline comparison figure.",
+#               file=sys.stderr)
+#         return
+
+#     # Renaming model names to plot figure-ready xlabels
+#     regex_dict = {f".*{re.escape(k)}.*": v for k, v in FEATURE_RENAMING_DICT.items()}
+#     combined_df["model"] = combined_df["model"].replace(regex_dict, regex=True)
+    
+#     combined_df["model"] = combined_df["model"].replace(r".*(hgb|full).*", "HGB model", regex=True)
+
+#     fig, ax = plt.subplots(figsize=(max(8, 1.2 * combined_df["model"].nunique()), 6))
+#     sns.barplot(data=combined_df, x="model", y="score", hue="metric", ax=ax,
+#                 errorbar="sd", err_kws={"linewidth": 1}, capsize=0.1, palette=palette, gap=0.1, legend=False)
+#     ax.set_ylabel("", fontsize=axis_label_fontsize, fontfamily=font_family)
+#     ax.set_xlabel("", fontsize=axis_label_fontsize, fontfamily=font_family)
+#     ax.tick_params(axis="x", labelsize=tick_label_fontsize)
+#     ax.tick_params(axis="y", labelsize=tick_label_fontsize)
+#     if font_family:
+#         for label in ax.get_xticklabels() + ax.get_yticklabels():
+#             label.set_fontfamily(font_family)
+#     # ax.set_title(title)
+#     # ax.tick_params(axis="x", rotation=45)
+    
+#     # ax.legend(title="metric", loc="upper right")
+#     ax.spines[['top', 'right']].set_visible(False)
+#     fig.tight_layout()
+#     fig.savefig(output_path, dpi=300)
+#     plt.close(fig)
+
+def plot_feature_baseline_comparison(combined_df, output_path, palette=PALETTE, font_family="Carlito", 
+                                    axis_label_fontsize=9, tick_label_fontsize=TICK_LABEL_FONTSIZE - 2,
                                       title="Champion model vs single-feature baselines"):
     if sns is None:
         print("WARNING: seaborn not installed, skipping feature-baseline comparison figure.",
               file=sys.stderr)
         return
-    fig, ax = plt.subplots(figsize=(max(8, 1.2 * combined_df["model"].nunique()), 6))
+
+    # Renaming model names to plot figure-ready xlabels
+    regex_dict = {f".*{re.escape(k)}.*": v for k, v in FEATURE_RENAMING_DICT.items()}
+    combined_df["model"] = combined_df["model"].replace(regex_dict, regex=True)
+    
+    combined_df["model"] = combined_df["model"].replace(r".*(hgb|full).*", "HGB model", regex=True)
+
+    
+    fig, ax = plt.subplots(figsize=(max(8, 1.4 * combined_df["model"].nunique()), 6))
     sns.barplot(data=combined_df, x="model", y="score", hue="metric", ax=ax,
-                errorbar="sd", capsize=0.1)
-    ax.set_ylabel("score")
-    ax.set_xlabel("")
-    ax.set_title(title)
-    ax.tick_params(axis="x", rotation=45)
-    ax.legend(title="metric", loc="upper right")
+                errorbar="sd", err_kws={"linewidth": 1}, capsize=0.1, palette=palette, gap=0.1,
+                legend=False, alpha=0.6)
+    ax.set_ylabel("", fontsize=axis_label_fontsize, fontfamily=font_family)
+    ax.set_xlabel("", fontsize=axis_label_fontsize, fontfamily=font_family)
+    ax.tick_params(axis="x", labelsize=tick_label_fontsize, rotation=45)
+    ax.tick_params(axis="y", labelsize=tick_label_fontsize)
+    if font_family:
+        for label in ax.get_xticklabels() + ax.get_yticklabels():
+            label.set_fontfamily(font_family)
+    # ax.set_title(title)
+    
+    # ax.legend(title="metric", loc="upper right")
+    ax.spines[['top', 'right']].set_visible(False)
     fig.tight_layout()
-    fig.savefig(output_path, dpi=200)
+    fig.savefig(output_path, dpi=300)
     plt.close(fig)
 
 
@@ -660,7 +815,8 @@ def compare_champion_to_single_features(
         champion_model_name, champion_features_file, single_feature_names, output_dir: Path,
         champion_model_path=None, champion_metadata_path=None,
         n_splits=DEFAULT_N_SPLITS, n_repeats=DEFAULT_N_REPEATS, random_state=DEFAULT_RANDOM_STATE,
-        refit_metric=DEFAULT_REFIT_METRIC):
+        refit_metric=DEFAULT_REFIT_METRIC, palette=None, font_family="Arial", axis_label_fontsize=9,
+        tick_label_fontsize=9):
     output_dir.mkdir(parents=True, exist_ok=True)
     champion_features = load_feature_list(champion_features_file)
     # one feature-table load covering both the champion's features and the single ones
@@ -700,7 +856,9 @@ def compare_champion_to_single_features(
     fig_path = output_dir / "feature_baseline_comparison.png"
     plot_feature_baseline_comparison(
         combined, fig_path,
-        title=f"{champion_model_name} (full feature set) vs single-feature logreg baselines",
+        #palette, font_family, axis_label_fontsize,
+        #tick_label_fontsize,
+        #title=f"{champion_model_name} (full feature set) vs single-feature logreg baselines",
     )
     print(f"Wrote {fig_path}")
     return combined
@@ -794,29 +952,6 @@ def compute_precision_at_k(df, label_col, score_col, fractions, lower_is_better=
         results[f] = float(ranked.iloc[:k][label_col].mean()) if k > 0 else float("nan")
     return results
 
-
-# def plot_precision_at_k_comparison(model_name, model_precisions, prime_precisions, fractions, output_path):
-#     x = np.arange(len(fractions))
-#     width = 0.35
-#     fig, ax = plt.subplots(figsize=(8, 6))
-#     model_vals = [model_precisions[f] * 100 for f in fractions]
-#     prime_vals = [prime_precisions[f] * 100 for f in fractions]
-#     bars1 = ax.bar(x - width / 2, model_vals, width, label=model_name, color="#4C72B0")
-#     bars2 = ax.bar(x + width / 2, prime_vals, width, label="PRIME", color="#DD8452")
-#     for bars in (bars1, bars2):
-#         for b in bars:
-#             ax.text(b.get_x() + b.get_width() / 2, b.get_height() + 1, f"{b.get_height():.1f}%",
-#                      ha="center", va="bottom", fontsize=9)
-#     ax.set_xticks(x)
-#     ax.set_xticklabels([f"Top {f}%" for f in fractions])
-#     ax.set_ylabel("Precision@k (% of top-k peptides that are validated immunogenic)")
-#     ax.set_ylim(0, 105)
-#     ax.set_title(f"Precision@k: {model_name} vs PRIME")
-#     ax.legend()
-#     fig.tight_layout()
-#     fig.savefig(output_path, dpi=200)
-#     plt.close(fig)
-#     return {"model": model_precisions, "prime": prime_precisions}
 def compute_random_baseline_precision(df, label_col):
     """Expected precision@k for a random ranking = overall prevalence of
     positives, constant regardless of k (a random subset's expected positive
@@ -824,37 +959,85 @@ def compute_random_baseline_precision(df, label_col):
     return float(df[label_col].mean())
 
 def plot_precision_at_k_comparison(model_name, model_precisions, prime_precisions, fractions, output_path,
-                                    baseline_precision=None):
+                                    baseline_precision=None, y_min=50,
+                                    axis_label_fontsize=AXIS_LABEL_FONTSIZE, tick_label_fontsize=TICK_LABEL_FONTSIZE,
+                                    point_label_fontsize=POINT_LABEL_FONTSIZE, legend_fontsize=LEGEND_FONTSIZE):
+
     x = np.arange(len(fractions))
     fig, ax = plt.subplots(figsize=(8, 6))
 
     model_vals = [model_precisions[f] * 100 for f in fractions]
     prime_vals = [prime_precisions[f] * 100 for f in fractions]
 
-    ax.plot(x, model_vals, marker="o", linewidth=2, color="#4C72B0", label=model_name)
-    ax.plot(x, prime_vals, marker="o", linewidth=2, color="#DD8452", label="PRIME")
+    ax.plot(x, model_vals, marker="o", linewidth=2, color=PALETTE['CEDAR-pos'], label="Final Model")#model_name) #A8CFE9
+    ax.plot(x, prime_vals, marker="o", linewidth=2, color=PALETTE['Random Self'], label="PRIME") #7FD194"
 
-    for xi, v in zip(x, model_vals):
-        ax.text(xi, v + 2, f"{v:.1f}%", ha="center", va="bottom", fontsize=9, color="#4C72B0")
-    for xi, v in zip(x, prime_vals):
-        ax.text(xi, v - 2, f"{v:.1f}%", ha="center", va="top", fontsize=9, color="#DD8452")
+    # for xi, v in zip(x, model_vals):
+    #     ax.text(xi, v + 2, f"{v:.1f}%", ha="center", va="bottom", fontsize=point_label_fontsize, color="#A8CFE9")
+    # for xi, v in zip(x, prime_vals):
+    #     ax.text(xi, v - 2, f"{v:.1f}%", ha="center", va="top", fontsize=point_label_fontsize, color="#E4A6E4")
 
     if baseline_precision is not None:
         baseline_pct = baseline_precision * 100
         ax.axhline(baseline_pct, color="gray", linestyle="--", linewidth=1.5,
-                    label=f"Random baseline (prevalence = {baseline_pct:.1f}%)")
+                    label=f"Positive Class Prevalence ({baseline_pct:.1f}%)")
 
     ax.set_xticks(x)
-    ax.set_xticklabels([f"Top {f}%" for f in fractions])
-    ax.set_xlabel("k (top % of peptides by score)")
-    ax.set_ylabel("Precision@k (% of top-k peptides that are validated immunogenic)")
-    ax.set_ylim(0, 105)
-    ax.set_title(f"Precision@k: {model_name} vs PRIME")
-    ax.legend(loc="best")
+    ax.set_xticklabels([f"{f}" for f in fractions], fontsize=tick_label_fontsize)
+    ax.set_xlabel("Top K% Ranked Peptides", fontsize=axis_label_fontsize)
+    ax.set_ylabel("Precision", fontsize=axis_label_fontsize)
+    ax.tick_params(axis="both", labelsize=tick_label_fontsize)
+
+    all_vals = model_vals + prime_vals + ([baseline_precision * 100] if baseline_precision is not None else [])
+    y_max = max(max(all_vals) + 8, y_min + 5)
+    ax.set_ylim(y_min, y_max)
+
+    ax.spines[['top', 'right']].set_visible(False)
+    #ax.set_title(f"Precision@k: {model_name} vs PRIME")
+    ax.legend(loc="best", fontsize=legend_fontsize)
     fig.tight_layout()
-    fig.savefig(output_path, dpi=200)
+    fig.savefig(output_path, dpi=300)
     plt.close(fig)
     return {"model": model_precisions, "prime": prime_precisions, "random_baseline": baseline_precision}
+
+def compute_roc_data(y_true, scores, lower_is_better=False):
+    """roc_curve/roc_auc_score both assume higher score = more likely
+    positive class, so a lower-is-better score (e.g. PRIME's %Rank) needs
+    its sign flipped first — this doesn't change the curve's shape or the
+    AUROC value, only which direction sklearn walks the threshold in."""
+    scores = -np.asarray(scores) if lower_is_better else np.asarray(scores)
+    fpr, tpr, _ = roc_curve(y_true, scores)
+    auc_val = roc_auc_score(y_true, scores)
+    return fpr, tpr, auc_val
+
+
+def plot_roc_curve_comparison(model_name, y_true, model_scores, prime_scores, output_path,
+                               model_lower_is_better=False, prime_lower_is_better=True):
+    model_fpr, model_tpr, model_auc = compute_roc_data(y_true, model_scores, model_lower_is_better)
+    prime_fpr, prime_tpr, prime_auc = compute_roc_data(y_true, prime_scores, prime_lower_is_better)
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+
+    ax.plot(model_fpr, model_tpr, linewidth=2, color="#A8CFE9",
+            label=f"{model_name} (AUROC = {model_auc:.3f})")
+    ax.plot(prime_fpr, prime_tpr, linewidth=2, color="#E4A6E4",
+            label=f"PRIME (AUROC = {prime_auc:.3f})")
+    ax.plot([0, 1], [0, 1], color="gray", linestyle="--", linewidth=1.5,
+            label="Random baseline (AUROC = 0.500)")
+
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1.02)
+    ax.set_xlabel("False positive rate")
+    ax.set_ylabel("True positive rate")
+    ax.spines[['top', 'right']].set_visible(False)
+    #ax.set_title(f"ROC curve: {model_name} vs PRIME")
+    ax.legend(loc="lower right")
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=300)
+    plt.close(fig)
+    return {"model_auc": model_auc, "prime_auc": prime_auc,
+            "model_fpr": model_fpr.tolist(), "model_tpr": model_tpr.tolist(),
+            "prime_fpr": prime_fpr.tolist(), "prime_tpr": prime_tpr.tolist()}
 
 
 def load_prime_scores(feature_table_path, prime_score_col):
@@ -919,7 +1102,7 @@ def plot_evaluation_summary(bar_data, ranked_df, immunogenic_col, score_col, pre
     ax3.legend(loc="upper right")
 
     fig.tight_layout()
-    fig.savefig(output_path, dpi=200)
+    fig.savefig(output_path, dpi=300)
     plt.close(fig)
 
 
@@ -988,14 +1171,14 @@ def plot_classification_threshold(df_labelled, score_col, label_col, threshold, 
             bbox=dict(boxstyle="round", facecolor="white", edgecolor="gray", alpha=0.9))
 
     fig.tight_layout()
-    fig.savefig(output_path, dpi=200)
+    fig.savefig(output_path, dpi=300)
     plt.close(fig)
     return {"tp": tp, "fn": fn, "fp": fp, "tn": tn, "recall": recall,
             "specificity": specificity, "precision": precision, "accuracy": accuracy,
             "upsampled": bool(upsampled_note)}
 
     fig.tight_layout()
-    fig.savefig(output_path, dpi=200)
+    fig.savefig(output_path, dpi=300)
     plt.close(fig)
     return {"tp": tp, "fn": fn, "fp": fp, "tn": tn, "recall": recall,
             "specificity": specificity, "precision": precision, "accuracy": accuracy}
@@ -1063,13 +1246,13 @@ def plot_calibration_curve(df_labelled, score_col, label_col, output_path, n_bin
     ax2.set_ylabel("Count")
 
     fig.tight_layout()
-    fig.savefig(output_path, dpi=200)
+    fig.savefig(output_path, dpi=300)
     plt.close(fig)
     return {"brier_score": brier, "ece": ece, "mean_predicted_probability": mean_predicted,
             "actual_prevalence": actual_prevalence}
 
 def evaluate_predictions(predictions_csv: str, immunogenic_peptides_path: str,
-                          non_immunogenic_peptides_path: str, output_dir: Path,
+                          non_immunogenic_peptides_path: str, output_dir: str,
                           peptides_of_interest_path: str | None = None,
                           score_col: str = "probability_immunogenic",
                           bin_width_capture: float = 0.02, threshold: float = 0.5,
@@ -1077,7 +1260,7 @@ def evaluate_predictions(predictions_csv: str, immunogenic_peptides_path: str,
                           upsample: bool = False, 
                           check_calibration=False, calibration_n_bins=10, calibration_strategy="quantile",
                           prime_feature_table=None, prime_score_col=None,
-                          prime_lower_is_better=True, precision_at_k_fractions=(10, 20, 30),
+                          prime_lower_is_better=True, precision_at_k_fractions=(5, 10, 15, 20, 30, 40, 50),
                           prefix: str = "evaluation"):
     output_dir.mkdir(parents=True, exist_ok=True)
     df = pd.read_csv(predictions_csv)
@@ -1166,6 +1349,7 @@ def evaluate_predictions(predictions_csv: str, immunogenic_peptides_path: str,
             print(calibration_metrics)
 
     precision_at_k_results = None
+    roc_results = None
     if prime_feature_table and prime_score_col:
         prime_scores = load_prime_scores(prime_feature_table, prime_score_col)
         if prime_score_col in df_labelled.columns:
@@ -1191,9 +1375,20 @@ def evaluate_predictions(predictions_csv: str, immunogenic_peptides_path: str,
         )
         print(f"Wrote precision@k comparison to {pk_fig_path}")
 
+        ## TESTING ROC CURVE
+        roc_fig_path = output_dir / f"{prefix}_roc_curve.png"
+        roc_results = plot_roc_curve_comparison(
+            prefix, df_pk["validated_immunogenic"].to_numpy(), df_pk[score_col].to_numpy(),
+            df_pk[prime_score_col].to_numpy(), roc_fig_path,
+            model_lower_is_better=lower_is_better, prime_lower_is_better=prime_lower_is_better,
+        )
+        print(f"Wrote ROC comparison to {roc_fig_path} "
+              f"(model AUROC={roc_results['model_auc']:.3f}, PRIME AUROC={roc_results['prime_auc']:.3f})")
+
     return annotated_csv, {"summary_figure": str(summary_fig_path),
                             "threshold_figure": str(threshold_fig_path), "metrics": metrics,
-                            "calibration_metrics": calibration_metrics}
+                            "calibration_metrics": calibration_metrics,
+                            "roc_results": roc_results}
 
 
 # ======================================================================
@@ -1307,7 +1502,7 @@ def cmd_evaluate(args):
                     prime_feature_table=validation.get("prime_feature_table", None), 
                     prime_score_col=validation.get("prime_score_col", None),
                     prime_lower_is_better= not (validation.get("prime_higher_is_better", False)), 
-                    precision_at_k_fractions=validation.get("precision_at_k_fractions", (10, 20, 30)),
+                    precision_at_k_fractions=validation.get("precision_at_k_fractions", (5, 10, 15, 20, 30, 40, 50)),
                     prefix=model_name,
                 )
     else:
@@ -1347,7 +1542,8 @@ def cmd_compare_features(args):
         Path(args.output_dir),
         champion_model_path=args.champion_model_path, champion_metadata_path=args.champion_metadata_path,
         n_splits=args.n_splits, n_repeats=args.n_repeats, random_state=args.random_state,
-        refit_metric=args.refit_metric,
+        refit_metric=args.refit_metric, palette=args.palette, font_family=args.font_family, axis_label_fontsize=args.axis_label_fontsize,
+        tick_label_fontsize=args.tick_label_fontsize
     )
 
 def cmd_compare_training_sets(args):
@@ -1368,11 +1564,11 @@ def cmd_compare_training_sets(args):
     comparison_dir = output_root / "comparison"
     palette = args.palette[0] if args.palette and len(args.palette) == 1 else args.palette
     plot_metric_comparison_across_training_sets(
-        combined_raw, metrics, comparison_dir, models=args.models,
-        palette=palette, font_family=args.font_family,
-        axis_label_fontsize=args.axis_label_fontsize,
-        tick_label_fontsize=args.tick_label_fontsize,
-        legend_fontsize=args.legend_fontsize,
+        combined_raw, metrics, comparison_dir, models=args.models, 
+        # font_family=args.font_family,
+        # axis_label_fontsize=args.axis_label_fontsize,
+        # tick_label_fontsize=args.tick_label_fontsize,
+        # legend_fontsize=args.legend_fontsize,
     )
 
 
@@ -1460,7 +1656,7 @@ def build_parser():
     p_eval.add_argument("--prime-higher-is-better", action="store_true",
                          help="Set if higher PRIME score = more immunogenic. Default assumes "
                               "PRIME %%Rank, where LOWER is better.")
-    p_eval.add_argument("--precision-at-k-fractions", nargs="+", type=int, default=[10, 20, 30])
+    p_eval.add_argument("--precision-at-k-fractions", nargs="+", type=int, default=[5, 10, 15, 20, 25, 30, 40, 50])
     p_eval.set_defaults(func=cmd_evaluate)
 
     p_cmp = sub.add_parser("compare-features",
@@ -1480,6 +1676,16 @@ def build_parser():
     p_cmp.add_argument("--n-repeats", type=int, default=DEFAULT_N_REPEATS)
     p_cmp.add_argument("--random-state", type=int, default=DEFAULT_RANDOM_STATE)
     p_cmp.add_argument("--refit-metric", default=DEFAULT_REFIT_METRIC)
+    
+    p_cmp.add_argument("--palette", nargs="+",
+                          help="Bar colors: one seaborn palette name (e.g. Set2, muted), or a list "
+                               "of hex colors matched to training sets in order, e.g. "
+                               "--palette '#1b9e77' '#d95f02' '#7570b3'.")
+    p_cmp.add_argument("--font-family", default="Arial")
+    p_cmp.add_argument("--axis-label-fontsize", type=int, default=9)
+    p_cmp.add_argument("--tick-label-fontsize", type=int, default=7)
+
+
     p_cmp.set_defaults(func=cmd_compare_features)
 
     # --- compare-training-sets ---

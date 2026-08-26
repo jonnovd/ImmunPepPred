@@ -8,4 +8,4 @@
 cd $PBS_O_WORKDIR
 
 source .venv/bin/activate
-python peptide_ml_workflow.py run --config testConfig.yaml
+python peptide_ml_workflow.py run --config finalModelConfig.yaml

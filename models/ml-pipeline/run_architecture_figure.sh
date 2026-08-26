@@ -1,5 +1,7 @@
-python peptide_ml_workflow.py compare-training-sets --config dryrun.yaml \
-  --training-set a_1 --training-set b_1 --training-set c_1 \
-  --palette "#1b9e77" "#d95f02" "#7570b3" \
-  --font-family "calibri" \
-  --axis-label-fontsize 9 --tick-label-fontsize 7 --legend-fontsize 9
+python peptide_ml_workflow.py compare-training-sets --config finalModelConfig.yaml \
+  --training-set CEDAR-neg --training-set random-self --training-set augmented-neg \
+  # --palette "#A8CFE9" "#E4A6E4" "#A0DDAF" \
+  # --font-family "calibri" \
+  # --axis-label-fontsize 12 --tick-label-fontsize 10 --legend-fontsize 9
+
+#--palette "#6AB9EC" "#E26CE1" "#7FD194" \ \

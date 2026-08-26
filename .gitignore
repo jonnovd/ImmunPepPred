@@ -34,3 +34,4 @@ models/ml-pipeline/results/*
 models/ml-pipeline/.venv*
 models/ml-pipeline/*.yaml
 models/ml-pipeline/features/*
+models/ml-pipeline/fonts/*
