@@ -35,3 +35,6 @@ models/ml-pipeline/.venv*
 models/ml-pipeline/*.yaml
 models/ml-pipeline/features/*
 models/ml-pipeline/fonts/*
+models/feat-importance/*
+models/feature_distributions/*
+models/fonts/*

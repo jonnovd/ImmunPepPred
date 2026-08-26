@@ -1,5 +1,4 @@
 # Adapted from NeoFox python implementation of Hex pathogenicity scoring algorithm
-# This was heavily vibe-coded
 
 from math import ceil, floor
 import argparse
@@ -144,7 +143,7 @@ def _worker(args):
 
 def score_all_peptides(peptides, reference_sequences, magic_number=4, n_workers=None):
     """
-    Score all peptides against the IEDB reference, grouped by length so that
+    Score all peptides against the reference, grouped by length so that
     each length group is processed as a single vectorised batch.
 
     Returns a dict mapping peptide string → best similarity score (or None).
