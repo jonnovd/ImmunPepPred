@@ -15,6 +15,7 @@ envs
 bin/hla-pred/netmhc
 bin/hla-pred/mixmhcpred
 bin/hla-pred/netmhcstabpan
+bin/hla-pred/*
 bin/PRIME-2.1.zip
 bin/DeepImmuno/
 bin/PRIME-2.1/
