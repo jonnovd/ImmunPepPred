@@ -42,3 +42,4 @@ models/feature_distributions/*
 models/fonts/*
 modules/processes/hlapredictiontools.nf
 modules/workflows/hla-pred_workflow.nf
+nextflowTesting.config
