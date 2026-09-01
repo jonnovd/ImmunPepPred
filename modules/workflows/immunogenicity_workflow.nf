@@ -22,12 +22,6 @@ workflow IMMUNOGENICITY_WORKFLOW {
         // ONLY RUNS ON 9 and 10mers
         if (params.use_deepimmuno) {
 
-            // PREP_DEEPIMMUNO_INPUT(peptide_file_ch.splitText(by: 1, file: true), params.hla_alleles)
-
-            // RUN_DEEPIMMUNO(PREP_DEEPIMMUNO_INPUT.out, file("${params.deepimmuno_dir}/data"), file("${params.deepimmuno_dir}/models"))
-            
-            // PROCESS_DEEPIMMUNO_OUTPUT(RUN_DEEPIMMUNO.out.collectFile())
-
             PREP_DEEPIMMUNO_INPUT(
                 peptide_file_ch.splitText(by: 5000000, file: true),
                 all_hla_alleles_ch,
@@ -49,11 +43,6 @@ workflow IMMUNOGENICITY_WORKFLOW {
         }
 
         if (params.use_prime) {
-            // prime_allele_ch = Channel.fromPath(params.hla_alleles)
-            //                         .splitText()
-            //                         .collect { allele ->
-            //                             "$allele, "
-            //                         }
             RUN_PRIME(peptide_file_ch.splitText(by: 5000000, file: true), all_hla_alleles_ch)
             outFiles = outFiles.mix(RUN_PRIME.out.collectFile(name: "immunogenicity_PRIME_results.txt", skip: 12, keepHeader: true))
         }

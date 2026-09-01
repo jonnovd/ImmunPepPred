@@ -1,6 +1,4 @@
 # Adapted from author's original wrapper script to accept peptides as parameters
-
-# Adapted from author's original wrapper script to accept peptides as parameters
 import argparse
 import os
 import shutil

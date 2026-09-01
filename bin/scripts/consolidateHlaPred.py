@@ -40,8 +40,6 @@ import pandas as pd
 
 DEFAULT_TOOLS = ['NetMHCpan', 'MixMHCpred', 'MHCFlurry']
 
-# Friendly short column-name aliases for known tools' best-rank/allele
-# output columns.
 TOOL_ALIASES = {
     'NetMHCpan': ('best_netmhc_r', 'netmhc_a'),
     'MixMHCpred': ('best_mixmhc_r', 'mixmhc_a'),
@@ -52,7 +50,6 @@ TOOL_ALIASES = {
 # Matches raw per-(allele, tool) rank columns, e.g. 'HLA-A01:09_MHCFlurry_%Rank'.
 RAW_RANK_COL_PATTERN = re.compile(r'^(HLA-[^_]+)_.+_%Rank$')
 
-
 def _tool_column_names(tool: str) -> tuple[str, str]:
     """Return (rank_col, allele_col) output names for a tool, using the
     friendly alias if known, otherwise deriving one from the tool name."""
@@ -61,12 +58,10 @@ def _tool_column_names(tool: str) -> tuple[str, str]:
     tool = tool.lower()
     return f'best_{tool}_r', f'{tool}_a'
 
-
 def read_allele_list(filepath: str) -> set[str]:
     """Read a one-allele-per-line text file into a set of allele names."""
     with open(filepath) as f:
         return {line.strip() for line in f if line.strip()}
-
 
 def _rank_cols_for_alleles(df: pd.DataFrame, tools: list[str], alleles: set[str]) -> list[str]:
     """
@@ -82,7 +77,6 @@ def _rank_cols_for_alleles(df: pd.DataFrame, tools: list[str], alleles: set[str]
             cols.append(col)
     return cols
 
-
 def _per_tool_best_rank(df: pd.DataFrame, tools: list[str], rank_cols: list[str]) -> pd.DataFrame:
     """Compute each tool's best (minimum) rank per peptide, restricted to rank_cols."""
     out = pd.DataFrame(index=df.index)
@@ -91,7 +85,6 @@ def _per_tool_best_rank(df: pd.DataFrame, tools: list[str], rank_cols: list[str]
         if tool_cols:
             out[f'{tool}_bestRank'] = df[tool_cols].min(axis=1)
     return out
-
 
 def get_binding_alleles(df: pd.DataFrame, rank_cols: list[str]) -> tuple[pd.Series, pd.Series]:
     """
@@ -113,7 +106,6 @@ def get_binding_alleles(df: pd.DataFrame, rank_cols: list[str]) -> tuple[pd.Seri
     weak_alleles = weak.groupby('peptide')['allele'].apply(lambda x: ';'.join(sorted(x.unique())))
 
     return strong_alleles, weak_alleles
-
 
 def merge_allele_batches(filepaths: list[str]) -> pd.DataFrame:
     """
@@ -147,7 +139,6 @@ def merge_allele_batches(filepaths: list[str]) -> pd.DataFrame:
         merged = df if merged is None else merged.merge(df, on='peptide', how='outer')
 
     return merged
-
 
 def build_consolidated_hla_table(filepaths: list[str], tools: list[str], all_alleles: set[str], common_alleles: set[str]) -> pd.DataFrame:
     """Merge allele-batch files and compute all summary feature columns."""
@@ -227,7 +218,6 @@ def build_consolidated_hla_table(filepaths: list[str], tools: list[str], all_all
 
     return result
 
-
 def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Consolidate allele-batched HLA prediction TSV(s) into a single processed feature CSV."
@@ -238,7 +228,6 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument('--output', required=True, help="Path to write the consolidated CSV to.")
     parser.add_argument('--tools', nargs='+', default=DEFAULT_TOOLS, help=f"Prediction tools to use (default: {DEFAULT_TOOLS}).")
     return parser.parse_args(argv)
-
 
 def main(argv=None) -> None:
     args = parse_args(argv)
@@ -251,7 +240,6 @@ def main(argv=None) -> None:
 
     result.to_csv(args.output, index=False)
     print(f"Saved {result.shape[0]} peptides, {result.shape[1]} columns to {args.output}")
-
 
 if __name__ == '__main__':
     main()

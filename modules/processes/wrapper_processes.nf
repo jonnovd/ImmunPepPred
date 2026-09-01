@@ -16,8 +16,6 @@ process GET_ALL_ALLELES {
     ' "$common_alleles" "$input_alleles" | sort -u > all_unique_alleles.txt
 
     """
-    //awk '{gsub(/^[[:space:]]+|[[:space:]]+$/, ""); if (NF) print}' $common_alleles $input_alleles | sort -u > "all_unique_alleles.txt"
-    //#cat $common_alleles $input_alleles | sort -u > all_unique_alleles.txt
 }
 
 process RUN_PEPSICKLE {
@@ -36,7 +34,7 @@ process RUN_PEPSICKLE {
 // Required input: fasta, cleavageThreshold, nmers, filter
 // Optional inputs can be left as NO_FILE to skip those functions in python script
 process GENERATE_PEPTIDES {
-    // TODO Do I need an environment for this? - probably for the python command
+    // TODO Add environment for this - probably for the python command
     //conda "${params.env_pepsickle}"
     input:
         tuple path (fasta), path (cleavagePredictions)//, path (refCleavagePredictions)
