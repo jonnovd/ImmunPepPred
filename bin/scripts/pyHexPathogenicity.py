@@ -1,5 +1,4 @@
 # Adapted from NeoFox python implementation of Hex pathogenicity scoring algorithm
-# This was heavily vibe-coded
 
 from math import ceil, floor
 import argparse
@@ -39,9 +38,6 @@ def read_reference(fasta_file):
             if line:
                 if not any(aa not in protein_letters for aa in line):
                     sequences.append(line)
-        # for record in SeqIO.parse(handle, "fasta"):
-        #     if not any(aa not in protein_letters for aa in record.seq):
-        #         sequences.append(str(record.seq))
     return sequences
 
 
@@ -53,8 +49,9 @@ def read_peptides(peptide_file):
 # ---------------------------------------------------------------------------
 # Weights
 # ---------------------------------------------------------------------------
-# Weights serve to give more importance to TCR interacting residues with regards to similarity
-# Potential to introduce iedb's masking technique for different HLA allele anchors
+# Weights give more importance to TCR interacting residues
+# TODO: Potential to introduce iedb's masking technique for different HLA allele anchors
+# TODO: But this requires a mask for each known HLA allele and introduces inaccuracies for unknown ones
 
 def get_sequence_weights(length, magic_number=1):
     """Return a positional weight array for a peptide of the given length."""
@@ -107,7 +104,7 @@ def score_length_group(peptides, reference_encoded, weights, chunk_size=256):
         )  # (R, C) raw (unnormalized) similarity scores
 
         # Mask out any ref score that would normalize to >= 1 for that peptide
-        # (i.e. self-matches or ties), leaving only strictly-better-than-self exclusions
+        # Ensuring 100% ID for viral similarity is not possible
         below_identity = scores < chunk_self[None, :]
         masked = np.where(below_identity, scores, -np.inf)
 

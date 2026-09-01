@@ -19,7 +19,7 @@ _BLOSUM62_BIO = substitution_matrices.load("BLOSUM62")
 AA_ORDER = protein_letters  # 20-character string of standard amino acids
 AA_INDEX = {aa: i for i, aa in enumerate(AA_ORDER)}
 
-# Build a (20, 20) integer matrix so scoring becomes array indexing
+# Build a (20, 20) integer matrix so scoring uses array indexing
 BLOSUM62_MATRIX = np.zeros((20, 20), dtype=np.int32)
 for i, aa1 in enumerate(AA_ORDER):
     for j, aa2 in enumerate(AA_ORDER):
@@ -38,9 +38,6 @@ def read_reference(fasta_file):
             if line:
                 if not any(aa not in protein_letters for aa in line):
                     sequences.append(line)
-        # for record in SeqIO.parse(handle, "fasta"):
-        #     if not any(aa not in protein_letters for aa in record.seq):
-        #         sequences.append(str(record.seq))
     return sequences
 
 
@@ -52,8 +49,9 @@ def read_peptides(peptide_file):
 # ---------------------------------------------------------------------------
 # Weights
 # ---------------------------------------------------------------------------
-# Weights serve to give more importance to TCR interacting residues with regards to similarity
-# Potential to introduce iedb's masking technique for different HLA allele anchors
+# Weights give more importance to TCR interacting residues
+# TODO: Potential to introduce iedb's masking technique for different HLA allele anchors
+# TODO: But this requires a mask for each known HLA allele and introduces inaccuracies for unknown ones
 
 def get_sequence_weights(length, magic_number=1):
     """Return a positional weight array for a peptide of the given length."""
@@ -93,25 +91,14 @@ def score_length_group(peptides, reference_encoded, weights, chunk_size=256):
 
     best_scores = np.empty(P, dtype=np.float32)
 
-    # Pre-weight the reference encodings so the inner loop is leaner:
-    # ref_weighted[r, pos] = BLOSUM62_MATRIX[ref[r, pos], :] * weights[pos]
-    # Shape: (R, L, 20) — references with weights baked in
     ref_blosum_weighted = BLOSUM62_MATRIX[reference_encoded] * weights[None, :, None]
     # ^ (R, L, 20): for each ref position, the weighted BLOSUM row
 
     for start in range(0, P, chunk_size):
         chunk = peptides[start:start + chunk_size]  # (C, L)
 
-        # For each (ref, chunk_peptide) pair, sum over positions:
-        # score[r, c] = sum_pos( BLOSUM62[ref[r,pos], chunk[c,pos]] * weights[pos] )
-        #             = sum_pos( ref_blosum_weighted[r, pos, chunk[c, pos]] )
-        # Use advanced indexing: gather the right column per position per chunk peptide
-        # chunk_scores[r, c] = sum_pos ref_blosum_weighted[r, pos, chunk[c, pos]]
-        scores = ref_blosum_weighted[:, np.arange(L)[None, :], chunk].sum(axis=2)
-        # Shape: (R, C) — but the indexing above needs one fix:
-        # ref_blosum_weighted[:, pos, chunk[c, pos]] -> loop-free via:
-        scores = ref_blosum_weighted[:, np.arange(L), :][:, np.arange(L)[:, None], chunk.T]
-        # Simpler equivalent:
+        # scores = ref_blosum_weighted[:, np.arange(L)[None, :], chunk].sum(axis=2)
+        # scores = ref_blosum_weighted[:, np.arange(L), :][:, np.arange(L)[:, None], chunk.T]
         scores = np.tensordot(
             ref_blosum_weighted,        # (R, L, 20)
             np.eye(20, dtype=np.int32)[chunk].transpose(1, 0, 2),  # (L, C, 20)

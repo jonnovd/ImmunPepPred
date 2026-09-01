@@ -15,6 +15,11 @@ envs
 bin/hla-pred/netmhc
 bin/hla-pred/mixmhcpred
 bin/hla-pred/netmhcstabpan
+bin/PRIME-2.1.zip
+bin/DeepImmuno/
+bin/PRIME-2.1/
+bin/ml_model
+bin/scripts/pyHex.py
 tool-analysis/
 dbs/
 input/
@@ -22,10 +27,6 @@ ahocorasick/
 local/dbs/
 local/logs/  
 local/results/
-bin/PRIME-2.1.zip
-bin/DeepImmuno/
-bin/PRIME-2.1/
-bin/ml_model
 *.venv
 models/data/
 models/saved_models/*
