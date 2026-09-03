@@ -3,12 +3,12 @@
 One script that replaces the notebook + `predict.py` + `filter_peptide_predictions.py`
 + `visualiseClassificationThreshold.py` combo. Four subcommands:
 
-| Subcommand | Does | Equivalent to |
-|---|---|---|
-| `train` | Grid-search + repeated-stratified-CV each model, save fitted pipelines + metadata + CV metric figures | the notebook's model cells |
-| `predict` | Load a saved pipeline + metadata, score a feature table, write a prioritised CSV | `predict.py` |
-| `evaluate` | Annotate a predictions CSV with ground truth, write the capture-summary figure (milestone bars + cumulative capture curve + per-bin immunogenic-count histogram) and the classification-threshold figure | `filter_peptide_predictions.py` + `visualiseClassificationThreshold.py` |
-| `run` | `train` -> `predict` -> `evaluate` for everything in a config file, in one go | the whole workflow, for an HPC batch job |
+| Subcommand | Function |
+|---|---|
+| `train` | Grid-search + repeated-stratified-CV each model, save fitted pipelines + metadata + CV metric figures |
+| `predict` | Load a saved pipeline + metadata, score a feature table, write a prioritised CSV |
+| `evaluate` | Annotate a predictions CSV with ground truth, write the capture-summary figure (milestone bars + cumulative capture curve + per-bin immunogenic-count histogram) and the classification-threshold figure |
+| `run` | `train` -> `predict` -> `evaluate` for everything in a config file, in one go |
 
 Every subcommand takes **either** `--config some.yaml` (batch mode, many
 training sets/models/validation sets at once — see `example_config.yaml`)
@@ -23,7 +23,7 @@ retraining anything.
 ## Setup
 
 ```bash
-pip install scikit-learn pandas numpy matplotlib seaborn joblib pyyaml --break-system-packages
+pip install scikit-learn pandas numpy matplotlib seaborn joblib pyyaml
 ```
 
 ## Quick single-run examples
@@ -62,7 +62,7 @@ python peptide_ml_workflow.py evaluate \
 ```
 (`--peptides some_subset.txt` is optional — omit it to evaluate on every
 peptide in the predictions CSV, or pass it to first restrict to a subset of
-interest, same as the old `filter_peptide_predictions.py -p`.)
+interest.)
 
 ## Batch / HPC use (config-driven)
 
@@ -107,18 +107,12 @@ gives the job; no extra parallelisation setup needed for a single-node run.
   (fast, ranking-based scoring only) and then the **winning** hyperparameters
   are used to rebuild a final version that supports `predict_proba`
   (`CalibratedClassifierCV` for linear, `probability=True` for RBF), refit on
-  the full training set. This mirrors what the notebook was doing manually
-  for its final saved SVM.
+  the full training set.
 - Feature lists are **fixed**, supplied by you per training set (a text file,
   one column name per line) — no automatic correlation-clustering/feature
-  selection is run. Do that analysis separately (e.g. keep using the relevant
-  notebook cells) and just point `features_file` at the result.
-- The composite CV stratification key (label + peptide length) and the
-  5-metric scoring dict (precision/recall/roc_auc/avg_precision/f0.5) are
-  taken directly from the notebook to keep the numbers comparable to your
-  earlier notebook runs.
+  selection is run. Do that analysis separately
 
 ## Files
 
 - `peptide_ml_workflow.py` — the script.
-- `example_config.yaml` — annotated template config; copy and edit.
+- `example_config.yaml` — annotated template config

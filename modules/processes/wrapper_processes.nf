@@ -50,7 +50,6 @@ process GENERATE_PEPTIDES {
         path "${fasta.baseName}_${filter}_nmers_${nmers}.csv", emit: csv
         path "${fasta.baseName}_excluded_genes.log", emit: log, optional: true
 
-    // TODO Check argument changes
     script:
     def ref = filter == 'noRefPeps' ? "-r $refProteome" : "" //--reference-cleavage-prediction $refCleavagePredictions" : ""
     def cleave = cleavageThreshold != 'null' ? "-c $cleavagePredictions -t $cleavageThreshold" : ""
